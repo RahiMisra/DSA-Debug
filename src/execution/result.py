@@ -98,12 +98,24 @@ class ExecutionResult:
         error_data = data.get("error")
         error = ExecutionError.from_dict(error_data) if error_data else None
 
+        raw_events = data.get("events", [])
+        events = []
+        for e in raw_events:
+            if isinstance(e, dict) and "event_type" in e:
+                try:
+                    from src.execution.events import ExecutionEvent
+                    events.append(ExecutionEvent.from_dict(e))
+                except Exception:
+                    events.append(e)
+            else:
+                events.append(e)
+
         return cls(
             status=status,
             final_array=data.get("final_array"),
             error=error,
             execution_time_ms=data.get("execution_time_ms", 0.0),
-            events=data.get("events", []),
+            events=events,
         )
 
     def to_json(self) -> str:

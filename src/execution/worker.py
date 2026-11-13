@@ -16,7 +16,9 @@ project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from src.execution.instrumentation import instrument_code
 from src.execution.result import ExecutionError, ExecutionResult, ExecutionStatus
+from src.execution.tracer import ExecutionTracer
 
 USER_CODE_FILENAME = "<user_code>"
 
@@ -88,11 +90,14 @@ def execute_code(
         function_name: Optional explicit name of the function to invoke.
 
     Returns:
-        ExecutionResult containing outcome status, array state, and error details.
+        ExecutionResult containing outcome status, array state, events, and error details.
     """
-    # 1. Syntax Check & Compilation
+    tracer = ExecutionTracer(initial_array=initial_array, target_filename=USER_CODE_FILENAME)
+
+    # 1. AST Instrumentation & Compilation
     try:
-        compiled = compile(code, USER_CODE_FILENAME, "exec")
+        instrumented_tree = instrument_code(code)
+        compiled = compile(instrumented_tree, USER_CODE_FILENAME, "exec")
     except SyntaxError as exc:
         return ExecutionResult.syntax_error(
             message=exc.msg,
@@ -107,7 +112,13 @@ def execute_code(
         )
 
     # 2. Namespace Preparation and Code Execution (defining functions)
-    namespace: dict[str, Any] = {"__name__": "__main__"}
+    namespace: dict[str, Any] = {
+        "__name__": "__main__",
+        "__trace_compare__": tracer.trace_compare,
+        "__trace_swap__": tracer.trace_swap,
+        "__trace_write__": tracer.trace_write,
+        "__trace_read__": tracer.trace_read,
+    }
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     user_stdout = io.StringIO()
@@ -129,6 +140,7 @@ def execute_code(
             line_number=lineno,
             traceback_text=traceback.format_exc(),
             partial_array=list(initial_array),
+            events=tracer.history.events,
         )
     finally:
         sys.stdout = old_stdout
@@ -141,18 +153,22 @@ def execute_code(
             error_type="NameError",
             message=err_msg or "Target function could not be resolved.",
             partial_array=list(initial_array),
+            events=tracer.history.events,
         )
 
-    # 4. Execute Function with Array
+    # 4. Execute Function with Array under Tracing
     array_copy = list(initial_array)
+    tracer.bind_array(array_copy)
     start_time = time.perf_counter()
 
     sys.stdout = user_stdout
     sys.stderr = user_stderr
 
     try:
+        tracer.install()
         return_value = func(array_copy)
     except Exception as exc:
+        tracer.uninstall()
         sys.stdout = old_stdout
         sys.stderr = old_stderr
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
@@ -164,8 +180,10 @@ def execute_code(
             line_number=lineno,
             traceback_text=traceback.format_exc(),
             partial_array=array_copy,
+            events=tracer.history.events,
         )
     finally:
+        tracer.uninstall()
         sys.stdout = old_stdout
         sys.stderr = old_stderr
 
@@ -181,6 +199,7 @@ def execute_code(
     return ExecutionResult.success(
         final_array=final_array,
         execution_time_ms=elapsed_ms,
+        events=tracer.history.events,
     )
 
 

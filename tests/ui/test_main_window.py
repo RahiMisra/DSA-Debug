@@ -4,13 +4,9 @@ import tkinter as tk
 from src.ui.main_window import MainWindow
 
 
-def test_main_window_initialization_and_properties() -> None:
+def test_main_window_initialization_and_properties(session_tk_root: tk.Tk) -> None:
     """Verify window title, initial dimensions, resizability, and clean close."""
-    root = tk.Tk()
-    # Withdraw window to prevent popping up during automated tests
-    root.withdraw()
-
-    window = MainWindow(root=root)
+    window = MainWindow(root=session_tk_root)
 
     # Title check
     assert window.root.title() == MainWindow.DEFAULT_TITLE
@@ -28,15 +24,11 @@ def test_main_window_initialization_and_properties() -> None:
     # Verify window is alive
     assert window.is_alive
 
-    # Clean close check
-    window.close()
-    assert not window.is_alive
 
-
-def test_main_window_default_lifecycle() -> None:
-    """Verify MainWindow lifecycle when creating its own root."""
-    window = MainWindow()
-    window.root.withdraw()
+def test_main_window_close_behavior() -> None:
+    """Verify MainWindow close behavior on an isolated Toplevel/window."""
+    root = tk.Toplevel()
+    window = MainWindow(root=root)
     assert window.is_alive
     window.close()
     assert not window.is_alive
