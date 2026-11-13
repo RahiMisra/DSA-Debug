@@ -21,6 +21,7 @@ import pytest
         "src.execution.tracer",
         "src.execution.events",
         "src.execution.instrumentation",
+        "src.execution.result",
         "src.visualization",
         "src.visualization.array_state",
         "src.visualization.event_processor",
