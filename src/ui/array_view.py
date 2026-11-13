@@ -1,0 +1,1 @@
+"""Array visualization view component."""
