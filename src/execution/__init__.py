@@ -2,6 +2,8 @@
 
 from src.execution.events import EventType, ExecutionEvent, ExecutionHistory
 from src.execution.instrumentation import TraceInstrumenter, instrument_code
+from src.execution.models import ListNode, TreeNode
+from src.execution.parsers import parse_leetcode_inputs
 from src.execution.result import ExecutionError, ExecutionResult, ExecutionStatus
 from src.execution.runner import CodeRunner, execute_code
 from src.execution.tracer import ExecutionTracer
@@ -18,4 +20,7 @@ __all__ = [
     "TraceInstrumenter",
     "instrument_code",
     "ExecutionTracer",
+    "ListNode",
+    "TreeNode",
+    "parse_leetcode_inputs",
 ]

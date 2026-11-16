@@ -22,6 +22,8 @@ import pytest
         "src.execution.events",
         "src.execution.instrumentation",
         "src.execution.result",
+        "src.execution.models",
+        "src.execution.parsers",
         "src.visualization",
         "src.visualization.array_state",
         "src.visualization.event_processor",

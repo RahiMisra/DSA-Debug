@@ -6,16 +6,31 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from src.execution.result import ExecutionResult, ExecutionStatus
 
 DEFAULT_TIMEOUT_SECONDS = 3.0
 
 
+def _serialize_for_ipc(data: Any) -> Any:
+    """Serialize data structures for JSON IPC transmission to worker."""
+    if isinstance(data, dict):
+        out = {}
+        for k, v in data.items():
+            if hasattr(v, "to_list") and callable(v.to_list):
+                out[k] = {"__type__": "ListNode", "values": v.to_list()}
+            elif hasattr(v, "to_level_order") and callable(v.to_level_order):
+                out[k] = {"__type__": "TreeNode", "values": v.to_level_order()}
+            else:
+                out[k] = v
+        return out
+    return data
+
+
 def execute_code(
     code: str,
-    initial_array: list[int],
+    initial_array: Any,
     function_name: Optional[str] = None,
 ) -> ExecutionResult:
     """Convenience in-process execution wrapper."""
@@ -43,7 +58,7 @@ class CodeRunner:
     def run_in_process(
         self,
         code: str,
-        initial_array: list[int],
+        initial_array: Any,
         function_name: Optional[str] = None,
     ) -> ExecutionResult:
         """Execute user code directly in-process (for testing and quick execution)."""
@@ -56,7 +71,7 @@ class CodeRunner:
     def run(
         self,
         code: str,
-        initial_array: list[int],
+        initial_array: Any,
         function_name: Optional[str] = None,
         timeout_seconds: Optional[float] = None,
     ) -> ExecutionResult:
@@ -64,7 +79,7 @@ class CodeRunner:
 
         Args:
             code: User-provided Python source code.
-            initial_array: Input array of integers.
+            initial_array: Input array, dict of arguments, or raw LeetCode input string.
             function_name: Optional name of the entry function.
             timeout_seconds: Max execution time before terminating the subprocess.
 
@@ -74,7 +89,7 @@ class CodeRunner:
         effective_timeout = timeout_seconds if timeout_seconds is not None else self.timeout_seconds
         payload = {
             "code": code,
-            "initial_array": initial_array,
+            "initial_array": _serialize_for_ipc(initial_array),
             "function_name": function_name,
         }
         payload_bytes = json.dumps(payload).encode("utf-8")
@@ -107,7 +122,7 @@ class CodeRunner:
                 pass
             return ExecutionResult.timeout(
                 timeout_seconds=effective_timeout,
-                partial_array=list(initial_array),
+                partial_array=list(initial_array) if isinstance(initial_array, list) else None,
             )
         except Exception as exc:
             process.kill()

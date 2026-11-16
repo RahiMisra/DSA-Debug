@@ -1,14 +1,16 @@
-"""Input panel component for specifying array data and execution parameters."""
+"""Input panel component for specifying algorithm input data and LeetCode parameters."""
 
 from __future__ import annotations
 
 import random
 import tkinter as tk
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
+
+from src.execution.parsers import parse_leetcode_inputs
 
 
 class InputPanel(tk.Frame):
-    """Panel allowing users to enter custom arrays, pick presets, and configure execution."""
+    """Panel allowing users to enter custom inputs in LeetCode format, pick presets, and configure execution."""
 
     BG_COLOR = "#181825"
     TEXT_COLOR = "#CDD6F4"
@@ -18,7 +20,7 @@ class InputPanel(tk.Frame):
     BTN_PRIMARY = "#89B4FA"
     BTN_PRIMARY_FG = "#11111B"
 
-    DEFAULT_ARRAY = "64, 34, 25, 12, 22, 11, 90"
+    DEFAULT_INPUT = "nums = [64, 34, 25, 12, 22, 11, 90]"
 
     def __init__(
         self,
@@ -32,13 +34,13 @@ class InputPanel(tk.Frame):
         self._create_widgets()
 
     def _create_widgets(self) -> None:
-        # Row 1: Array Input and Run Button
+        # Row 1: Input and Run Button
         top_frame = tk.Frame(self, bg=self.BG_COLOR)
         top_frame.pack(fill=tk.X, expand=True)
 
         lbl_array = tk.Label(
             top_frame,
-            text="Input Array:",
+            text="Input:",
             bg=self.BG_COLOR,
             fg=self.TEXT_COLOR,
             font=("Segoe UI", 10, "bold"),
@@ -53,7 +55,7 @@ class InputPanel(tk.Frame):
             font=("Consolas", 11),
             relief="flat",
         )
-        self.array_entry.insert(0, self.DEFAULT_ARRAY)
+        self.array_entry.insert(0, self.DEFAULT_INPUT)
         self.array_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10), ipady=3)
 
         self.run_btn = tk.Button(
@@ -96,7 +98,7 @@ class InputPanel(tk.Frame):
 
         lbl_presets = tk.Label(
             bot_frame,
-            text="Presets:",
+            text="LeetCode Presets:",
             bg=self.BG_COLOR,
             fg="#A6ADC8",
             font=("Segoe UI", 9),
@@ -104,11 +106,12 @@ class InputPanel(tk.Frame):
         lbl_presets.pack(side=tk.LEFT, padx=(0, 6))
 
         presets = [
-            ("Random", self._preset_random),
-            ("Reverse", lambda: self.set_array_text("90, 64, 34, 25, 22, 12, 11")),
-            ("Sorted", lambda: self.set_array_text("11, 12, 22, 25, 34, 64, 90")),
-            ("Duplicates", lambda: self.set_array_text("5, 2, 8, 5, 2, 9, 8")),
-            ("Negatives", lambda: self.set_array_text("-10, 5, -2, 0, 8, -5")),
+            ("Array", lambda: self.set_array_text("nums = [2, 7, 11, 15], target = 9")),
+            ("String", lambda: self.set_array_text('s = "anagram", t = "nagaram"')),
+            ("Linked List", lambda: self.set_array_text("head = [1, 2, 3, 4, 5]")),
+            ("Binary Tree", lambda: self.set_array_text("root = [3, 9, 20, null, null, 15, 7]")),
+            ("Graph", lambda: self.set_array_text("isConnected = [[1, 1, 0], [1, 1, 0], [0, 0, 1]]")),
+            ("Random Array", self._preset_random),
         ]
 
         for label, cmd in presets:
@@ -129,18 +132,18 @@ class InputPanel(tk.Frame):
     def _preset_random(self) -> None:
         """Generate a random 8-element integer list."""
         vals = [random.randint(5, 99) for _ in range(8)]
-        self.set_array_text(", ".join(str(x) for x in vals))
+        self.set_array_text(f"nums = {vals}")
 
     def _on_run_click(self) -> None:
         if self.on_run:
             self.on_run()
 
     def get_array_text(self) -> str:
-        """Return raw text from array entry."""
+        """Return raw text from input entry."""
         return self.array_entry.get().strip()
 
     def set_array_text(self, text: str) -> None:
-        """Set array entry text."""
+        """Set input entry text."""
         self.array_entry.delete(0, tk.END)
         self.array_entry.insert(0, text)
 
@@ -149,14 +152,17 @@ class InputPanel(tk.Frame):
         text = self.func_entry.get().strip()
         return text if text else None
 
-    def parse_array(self) -> list[int]:
-        """Parse comma-separated integers from entry.
-
-        Raises:
-            ValueError: If entry contains invalid integer formatting.
-        """
+    def parse_inputs(self) -> dict[str, Any]:
+        """Parse input specifications into a dictionary of parameters."""
         raw = self.get_array_text()
-        if not raw:
-            return []
-        items = [item.strip() for item in raw.split(",") if item.strip()]
-        return [int(item) for item in items]
+        return parse_leetcode_inputs(raw)
+
+    def parse_array(self) -> list[int]:
+        """Backward-compatible helper to retrieve a primary integer array."""
+        parsed = self.parse_inputs()
+        for v in parsed.values():
+            if isinstance(v, (list, tuple)):
+                return list(v)
+            elif hasattr(v, "to_list") and callable(v.to_list):
+                return v.to_list()
+        return []
