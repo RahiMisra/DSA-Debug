@@ -9,6 +9,8 @@ from src.visualization.array_state import (
     ElementHighlight,
 )
 from src.visualization.event_processor import EventProcessor
+from src.visualization.linked_list_canvas import LinkedListCanvas
+from src.visualization.tree_canvas import BinaryTreeCanvas
 
 __all__ = [
     "ElementHighlight",
@@ -18,4 +20,6 @@ __all__ = [
     "ArrayElementState",
     "ArrayViewState",
     "EventProcessor",
+    "LinkedListCanvas",
+    "BinaryTreeCanvas",
 ]

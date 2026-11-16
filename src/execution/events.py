@@ -18,6 +18,22 @@ class EventType(str, Enum):
     READ = "READ"
 
 
+def _safe_json_value(val: Any) -> Any:
+    """Ensure a value is safely serializable to JSON."""
+    if val is None or isinstance(val, (int, float, str, bool)):
+        return val
+    elif isinstance(val, (list, tuple, set)):
+        return [_safe_json_value(x) for x in val]
+    elif isinstance(val, dict):
+        return {str(k): _safe_json_value(v) for k, v in val.items()}
+    elif hasattr(val, "val"):
+        inner_val = getattr(val, "val")
+        if isinstance(inner_val, (int, float, str, bool)):
+            return inner_val
+        return str(val)
+    return str(val)
+
+
 @dataclass
 class ExecutionEvent:
     """Represents a single atomic execution step/event in the algorithm."""
@@ -54,8 +70,8 @@ class ExecutionEvent:
             "line_number": self.line_number,
             "array_state": list(self.array_state),
             "indices": list(self.indices),
-            "values": list(self.values),
-            "metadata": dict(self.metadata),
+            "values": [_safe_json_value(v) for v in self.values],
+            "metadata": {str(k): _safe_json_value(v) for k, v in self.metadata.items()},
         }
 
     @classmethod

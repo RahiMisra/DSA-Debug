@@ -13,6 +13,8 @@ from src.ui.code_editor import CodeEditor
 from src.ui.execution_controls import ExecutionControls
 from src.ui.input_panel import InputPanel
 from src.visualization.event_processor import EventProcessor
+from src.visualization.linked_list_canvas import LinkedListCanvas
+from src.visualization.tree_canvas import BinaryTreeCanvas
 
 
 class MainWindow:
@@ -50,7 +52,11 @@ class MainWindow:
 
     def _create_layout(self) -> None:
         # 1. Top Panel: Array Input & Run
-        self.input_panel = InputPanel(self.root, on_run=self.handle_run)
+        self.input_panel = InputPanel(
+            self.root,
+            on_run=self.handle_run,
+            on_preset_selected=self.handle_preset_selected,
+        )
         self.input_panel.pack(fill=tk.X, side=tk.TOP)
 
         # 2. Error Banner (hidden by default)
@@ -102,11 +108,11 @@ class MainWindow:
         self.editor.pack(fill=tk.BOTH, expand=True)
         center_frame.add(editor_container, minsize=380, width=480)
 
-        # Right: Array View
+        # Right: Visualization View
         viz_container = tk.Frame(center_frame, bg="#0F172A")
-        lbl_viz = tk.Label(
+        self.lbl_viz = tk.Label(
             viz_container,
-            text="Array Execution Visualization",
+            text="Execution Visualization",
             bg="#181825",
             fg="#CDD6F4",
             font=("Segoe UI", 9, "bold"),
@@ -114,9 +120,13 @@ class MainWindow:
             pady=4,
             anchor="w",
         )
-        lbl_viz.pack(fill=tk.X)
+        self.lbl_viz.pack(fill=tk.X)
         self.array_view = ArrayView(viz_container)
         self.array_view.pack(fill=tk.BOTH, expand=True)
+
+        self.linked_list_view = LinkedListCanvas(viz_container)
+        self.tree_view = BinaryTreeCanvas(viz_container)
+
         center_frame.add(viz_container, minsize=400)
 
         # Initialize array view with initial input panel data
@@ -126,25 +136,60 @@ class MainWindow:
         except Exception:
             pass
 
+    def handle_preset_selected(self, preset_name: str) -> None:
+        """Populate appropriate algorithm template code when a preset is selected."""
+        if preset_name == "Linked List":
+            code = """def traverse_linked_list(head):
+    curr = head
+    while curr is not None:
+        curr = curr.next
+    return head
+"""
+            self.editor.set_code(code)
+        elif preset_name == "Binary Tree":
+            code = """def search_bst(root, target=15):
+    curr = root
+    while curr is not None:
+        if curr.val == target:
+            return curr
+        elif target < curr.val:
+            curr = curr.left
+        else:
+            curr = curr.right
+    return None
+"""
+            self.editor.set_code(code)
+        elif preset_name in ("Array", "Random Array"):
+            code = """def bubble_sort(arr):
+    n = len(arr)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if arr[j] > arr[j + 1]:
+                arr[j], arr[j + 1] = arr[j + 1], arr[j]
+"""
+            self.editor.set_code(code)
+
     def handle_run(self) -> None:
         """Execute user code and initialize execution history for playback."""
         self._stop_playback()
         self._clear_error()
 
-        # Parse array
+        # Parse inputs (supports LeetCode syntax or plain arrays)
         try:
+            inputs = self.input_panel.parse_inputs()
             initial_array = self.input_panel.parse_array()
         except ValueError as exc:
-            self._show_error(f"Invalid input array: {exc}. Please enter comma-separated integers.")
+            self._show_error(f"Invalid input: {exc}. Please check your syntax.")
             return
 
         code = self.editor.get_code()
         func_name = self.input_panel.get_function_name()
 
         # Run user code through isolated subprocess runner
+        payload = inputs if inputs else initial_array
         result: ExecutionResult = self.runner.run(
             code=code,
-            initial_array=initial_array,
+            initial_array=payload,
             function_name=func_name,
         )
 
@@ -210,20 +255,55 @@ class MainWindow:
 
         if self.current_step_index == -1:
             # Initial state before algorithm begins
-            self.array_view.set_array(self.history.initial_array)
             self.editor.clear_highlight()
+            if self.history and len(self.history) > 0 and self.history.events[0].metadata.get("linked_list"):
+                self.array_view.pack_forget()
+                self.tree_view.pack_forget()
+                self.linked_list_view.pack(fill=tk.BOTH, expand=True)
+                self.linked_list_view.render_event(self.history.events[0])
+                self.lbl_viz.config(text="Linked List Execution Visualization")
+            elif self.history and len(self.history) > 0 and self.history.events[0].metadata.get("tree"):
+                self.array_view.pack_forget()
+                self.linked_list_view.pack_forget()
+                self.tree_view.pack(fill=tk.BOTH, expand=True)
+                self.tree_view.render_event(self.history.events[0])
+                self.lbl_viz.config(text="Binary Tree Execution Visualization")
+            else:
+                self.linked_list_view.pack_forget()
+                self.tree_view.pack_forget()
+                self.array_view.pack(fill=tk.BOTH, expand=True)
+                self.array_view.set_array(self.history.initial_array)
+                self.lbl_viz.config(text="Array Execution Visualization")
+
             self.controls.set_state(
                 total_steps=total,
                 current_step=-1,
-                details_text="Initial array state before algorithm start.",
+                details_text="Initial state before algorithm start.",
             )
             return
 
         event: ExecutionEvent = self.history.get_step(self.current_step_index)
 
-        # 1. Update Array View
-        view_state = EventProcessor.process_event(event)
-        self.array_view.set_array_state(view_state)
+        # 1. Update Visualization Views
+        if event.metadata.get("linked_list"):
+            self.array_view.pack_forget()
+            self.tree_view.pack_forget()
+            self.linked_list_view.pack(fill=tk.BOTH, expand=True)
+            self.linked_list_view.render_event(event)
+            self.lbl_viz.config(text="Linked List Execution Visualization")
+        elif event.metadata.get("tree"):
+            self.array_view.pack_forget()
+            self.linked_list_view.pack_forget()
+            self.tree_view.pack(fill=tk.BOTH, expand=True)
+            self.tree_view.render_event(event)
+            self.lbl_viz.config(text="Binary Tree Execution Visualization")
+        else:
+            self.linked_list_view.pack_forget()
+            self.tree_view.pack_forget()
+            self.array_view.pack(fill=tk.BOTH, expand=True)
+            view_state = EventProcessor.process_event(event)
+            self.array_view.set_array_state(view_state)
+            self.lbl_viz.config(text="Array Execution Visualization")
 
         # 2. Update Code Editor Line Highlight
         if event.line_number:

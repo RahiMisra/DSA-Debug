@@ -26,10 +26,12 @@ class InputPanel(tk.Frame):
         self,
         master: Optional[tk.Widget] = None,
         on_run: Optional[Callable[[], None]] = None,
+        on_preset_selected: Optional[Callable[[str], None]] = None,
         **kwargs,
     ) -> None:
         super().__init__(master, bg=self.BG_COLOR, padx=10, pady=8, **kwargs)
         self.on_run = on_run
+        self.on_preset_selected = on_preset_selected
 
         self._create_widgets()
 
@@ -106,15 +108,14 @@ class InputPanel(tk.Frame):
         lbl_presets.pack(side=tk.LEFT, padx=(0, 6))
 
         presets = [
-            ("Array", lambda: self.set_array_text("nums = [2, 7, 11, 15], target = 9")),
-            ("String", lambda: self.set_array_text('s = "anagram", t = "nagaram"')),
-            ("Linked List", lambda: self.set_array_text("head = [1, 2, 3, 4, 5]")),
-            ("Binary Tree", lambda: self.set_array_text("root = [3, 9, 20, null, null, 15, 7]")),
-            ("Graph", lambda: self.set_array_text("isConnected = [[1, 1, 0], [1, 1, 0], [0, 0, 1]]")),
-            ("Random Array", self._preset_random),
+            ("Array", "nums = [2, 7, 11, 15], target = 9"),
+            ("String", 's = "anagram", t = "nagaram"'),
+            ("Linked List", "head = [1, 2, 3, 4, 5]"),
+            ("Binary Tree", "root = [10, 5, 20, null, null, 15, 30], target = 15"),
+            ("Graph", "isConnected = [[1, 1, 0], [1, 1, 0], [0, 0, 1]]"),
         ]
 
-        for label, cmd in presets:
+        for label, default_txt in presets:
             btn = tk.Button(
                 bot_frame,
                 text=label,
@@ -125,14 +126,36 @@ class InputPanel(tk.Frame):
                 padx=6,
                 pady=1,
                 cursor="hand2",
-                command=cmd,
+                command=lambda lbl=label, txt=default_txt: self._handle_preset(lbl, txt),
             )
             btn.pack(side=tk.LEFT, padx=2)
+
+        btn_rand = tk.Button(
+            bot_frame,
+            text="Random Array",
+            bg=self.BTN_BG,
+            fg=self.TEXT_COLOR,
+            font=("Segoe UI", 8),
+            relief="flat",
+            padx=6,
+            pady=1,
+            cursor="hand2",
+            command=self._preset_random,
+        )
+        btn_rand.pack(side=tk.LEFT, padx=2)
+
+    def _handle_preset(self, label: str, text: str) -> None:
+        """Apply preset text and invoke optional preset callback."""
+        self.set_array_text(text)
+        if self.on_preset_selected:
+            self.on_preset_selected(label)
 
     def _preset_random(self) -> None:
         """Generate a random 8-element integer list."""
         vals = [random.randint(5, 99) for _ in range(8)]
         self.set_array_text(f"nums = {vals}")
+        if self.on_preset_selected:
+            self.on_preset_selected("Random Array")
 
     def _on_run_click(self) -> None:
         if self.on_run:
