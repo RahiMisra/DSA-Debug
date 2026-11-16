@@ -1,23 +1,56 @@
-"""Array visualization view component using Tkinter Canvas."""
+"""Array and string visualization view component using Tkinter Canvas."""
 
 from __future__ import annotations
 
 import tkinter as tk
-from typing import Optional
+from typing import Optional, Sequence
 
-from src.visualization.array_state import ArrayViewState, ElementHighlight
+from src.visualization.array_state import (
+    BOX_BORDER_COLORS,
+    BOX_FILL_COLORS,
+    ArrayViewState,
+    ElementHighlight,
+)
 
 
 class ArrayView(tk.Frame):
-    """Visual canvas representing array elements as dynamic vertical bars."""
+    """Visual canvas representing array/string elements as boxed cells or vertical bars."""
 
     BG_COLOR = "#0F172A"       # Slate 900
     TEXT_COLOR = "#F8FAFC"     # Slate 50
     MUTED_TEXT = "#94A3B8"     # Slate 400
     BASELINE_COLOR = "#334155" # Slate 700
 
-    def __init__(self, master: Optional[tk.Widget] = None, **kwargs) -> None:
+    STYLE_BOX = "box"
+    STYLE_BAR = "bar"
+
+    def __init__(
+        self,
+        master: Optional[tk.Widget] = None,
+        view_style: str = STYLE_BOX,
+        **kwargs,
+    ) -> None:
         super().__init__(master, bg=self.BG_COLOR, **kwargs)
+        self._view_style = view_style
+
+        # Top toolbar for style switching
+        self.toolbar = tk.Frame(self, bg=self.BG_COLOR)
+        self.toolbar.pack(side=tk.TOP, fill=tk.X, padx=8, pady=(4, 0))
+
+        self.btn_toggle_style = tk.Button(
+            self.toolbar,
+            text="Switch to Bar View" if self._view_style == self.STYLE_BOX else "Switch to Box View",
+            bg="#1E293B",
+            fg=self.MUTED_TEXT,
+            font=("Segoe UI", 8),
+            relief="flat",
+            padx=6,
+            pady=1,
+            cursor="hand2",
+            command=self.toggle_view_style,
+        )
+        self.btn_toggle_style.pack(side=tk.RIGHT)
+
         self.canvas = tk.Canvas(
             self,
             bg=self.BG_COLOR,
@@ -27,6 +60,24 @@ class ArrayView(tk.Frame):
 
         self._current_state: ArrayViewState = ArrayViewState.from_array([])
         self.canvas.bind("<Configure>", self._on_resize)
+
+    @property
+    def view_style(self) -> str:
+        """Return the current visual style ('box' or 'bar')."""
+        return self._view_style
+
+    def set_view_style(self, style: str) -> None:
+        """Set visual style ('box' or 'bar') and re-render."""
+        if style in (self.STYLE_BOX, self.STYLE_BAR):
+            self._view_style = style
+            btn_text = "Switch to Bar View" if self._view_style == self.STYLE_BOX else "Switch to Box View"
+            self.btn_toggle_style.config(text=btn_text)
+            self.render()
+
+    def toggle_view_style(self) -> None:
+        """Toggle between box and bar visual styles."""
+        new_style = self.STYLE_BAR if self._view_style == self.STYLE_BOX else self.STYLE_BOX
+        self.set_view_style(new_style)
 
     @property
     def current_state(self) -> ArrayViewState:
@@ -40,10 +91,10 @@ class ArrayView(tk.Frame):
 
     def set_array(
         self,
-        array: list[int],
+        array: Sequence,
         highlights: Optional[dict[int, ElementHighlight]] = None,
     ) -> None:
-        """Convenience method to set array values and optional highlights."""
+        """Convenience method to set array/string values and optional highlights."""
         self.set_array_state(ArrayViewState.from_array(array, highlights=highlights))
 
     def _on_resize(self, event: tk.Event) -> None:
@@ -51,7 +102,7 @@ class ArrayView(tk.Frame):
         self.render()
 
     def render(self) -> None:
-        """Render array bars, values, and highlights on the canvas."""
+        """Render elements on canvas according to active view style."""
         self.canvas.delete("all")
 
         elements = self._current_state.elements
@@ -77,6 +128,85 @@ class ArrayView(tk.Frame):
             )
             return
 
+        if self._view_style == self.STYLE_BAR:
+            self._render_bars(width, height, elements)
+        else:
+            self._render_boxes(width, height, elements)
+
+    def _render_boxes(self, width: int, height: int, elements: list) -> None:
+        """Render array/string elements as horizontal boxed cells with centered values."""
+        n = len(elements)
+        pad_x = 24.0
+        avail_w = max(20.0, width - 2 * pad_x)
+
+        # Dynamic box sizing based on element count
+        max_box_size = 56.0
+        min_box_size = 24.0
+
+        # Space per item
+        ideal_spacing = 8.0
+        computed_size = (avail_w - (n - 1) * ideal_spacing) / n
+
+        if computed_size >= min_box_size:
+            box_size = min(max_box_size, computed_size)
+            spacing = ideal_spacing
+        else:
+            # Dense view
+            box_size = max(18.0, (avail_w - (n - 1) * 3.0) / n)
+            spacing = max(2.0, min(6.0, box_size * 0.15))
+
+        total_w = n * box_size + (n - 1) * spacing
+        start_x = max(pad_x, (width - total_w) / 2)
+        center_y = height / 2 - 8.0
+
+        y0 = center_y - box_size / 2
+        y1 = center_y + box_size / 2
+
+        font_size = max(8, min(14, int(box_size * 0.36)))
+
+        for i, elem in enumerate(elements):
+            x0 = start_x + i * (box_size + spacing)
+            x1 = x0 + box_size
+
+            is_highlighted = elem.highlight != ElementHighlight.DEFAULT
+            border_w = 3 if is_highlighted else 2
+
+            # Draw box rectangle
+            self.canvas.create_rectangle(
+                x0,
+                y0,
+                x1,
+                y1,
+                fill=elem.box_fill_color,
+                outline=elem.box_border_color,
+                width=border_w,
+                tags=(f"box_{i}", "box"),
+            )
+
+            # Draw centered value / character
+            self.canvas.create_text(
+                (x0 + x1) / 2,
+                (y0 + y1) / 2,
+                text=str(elem.value),
+                fill=self.TEXT_COLOR,
+                font=("Consolas", font_size, "bold"),
+                tags=(f"val_{i}", "value_text"),
+            )
+
+            # Draw index below box
+            if box_size >= 20:
+                self.canvas.create_text(
+                    (x0 + x1) / 2,
+                    y1 + 14,
+                    text=str(elem.index),
+                    fill=self.MUTED_TEXT,
+                    font=("Consolas", 9),
+                    tags=(f"idx_{i}", "index_text"),
+                )
+
+    def _render_bars(self, width: int, height: int, elements: list) -> None:
+        """Render array elements as vertical bars."""
+        n = len(elements)
         pad_x = 20
         pad_top = 35
         pad_bottom = 35
@@ -94,31 +224,37 @@ class ArrayView(tk.Frame):
             width=2,
         )
 
-        values = [elem.value for elem in elements]
-        min_val = min(values)
-        max_val = max(values)
-        val_range = max_val - min_val
+        try:
+            num_values = [float(elem.value) for elem in elements]
+            min_val = min(num_values)
+            max_val = max(num_values)
+            val_range = max_val - min_val
+        except (ValueError, TypeError):
+            min_val = 0.0
+            max_val = 1.0
+            val_range = 1.0
 
         slot_w = available_w / n
         spacing = max(1.0, min(8.0, slot_w * 0.15))
         bar_w = max(1.0, slot_w - spacing)
-
         min_bar_h = 16.0
 
         for i, elem in enumerate(elements):
             x0 = pad_x + i * slot_w + spacing / 2
             x1 = x0 + bar_w
 
-            # Compute normalized height
-            if val_range == 0:
+            try:
+                num_v = float(elem.value)
+                if val_range == 0:
+                    bar_h = min_bar_h + available_h * 0.4
+                else:
+                    bar_h = min_bar_h + ((num_v - min_val) / val_range) * (available_h - min_bar_h - 10)
+            except (ValueError, TypeError):
                 bar_h = min_bar_h + available_h * 0.4
-            else:
-                bar_h = min_bar_h + ((elem.value - min_val) / val_range) * (available_h - min_bar_h - 10)
 
             y0 = baseline_y - bar_h
             y1 = baseline_y
 
-            # Draw bar rectangle
             self.canvas.create_rectangle(
                 x0,
                 y0,
@@ -129,9 +265,7 @@ class ArrayView(tk.Frame):
                 tags=f"bar_{i}",
             )
 
-            # Draw text labels if there's enough horizontal room
             if slot_w >= 22:
-                # Value label above bar
                 self.canvas.create_text(
                     (x0 + x1) / 2,
                     max(12, y0 - 10),
@@ -139,7 +273,6 @@ class ArrayView(tk.Frame):
                     fill=self.TEXT_COLOR,
                     font=("Consolas", 10, "bold"),
                 )
-                # Index label below baseline
                 self.canvas.create_text(
                     (x0 + x1) / 2,
                     baseline_y + 14,
@@ -148,7 +281,6 @@ class ArrayView(tk.Frame):
                     font=("Consolas", 9),
                 )
             elif elem.highlight != ElementHighlight.DEFAULT:
-                # Always show value for actively operated elements even when dense
                 self.canvas.create_text(
                     (x0 + x1) / 2,
                     max(12, y0 - 10),
