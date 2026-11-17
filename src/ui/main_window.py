@@ -13,6 +13,7 @@ from src.ui.code_editor import CodeEditor
 from src.ui.execution_controls import ExecutionControls
 from src.ui.input_panel import InputPanel
 from src.visualization.event_processor import EventProcessor
+from src.visualization.graph_canvas import GraphCanvas
 from src.visualization.linked_list_canvas import LinkedListCanvas
 from src.visualization.tree_canvas import BinaryTreeCanvas
 
@@ -126,6 +127,7 @@ class MainWindow:
 
         self.linked_list_view = LinkedListCanvas(viz_container)
         self.tree_view = BinaryTreeCanvas(viz_container)
+        self.graph_view = GraphCanvas(viz_container)
 
         center_frame.add(viz_container, minsize=400)
 
@@ -157,6 +159,24 @@ class MainWindow:
         else:
             curr = curr.right
     return None
+"""
+            self.editor.set_code(code)
+        elif preset_name == "Graph":
+            code = """def count_provinces(isConnected):
+    n = len(isConnected)
+    visited = [False] * n
+    provinces = 0
+    for start in range(n):
+        if not visited[start]:
+            provinces += 1
+            stack = [start]
+            while stack:
+                node = stack.pop()
+                visited[node] = True
+                for neighbor in range(n):
+                    if isConnected[node][neighbor] == 1 and not visited[neighbor]:
+                        stack.append(neighbor)
+    return provinces
 """
             self.editor.set_code(code)
         elif preset_name in ("Array", "Random Array"):
@@ -210,7 +230,8 @@ class MainWindow:
         })
 
         self.current_step_index = -1
-        self.array_view.set_array(initial_array)
+        kind, initial_event = self._initial_view()
+        self._render_view(kind, initial_event)
         self.editor.clear_highlight()
 
         total = len(self.history)
@@ -247,7 +268,7 @@ class MainWindow:
         self._apply_current_step()
 
     def _apply_current_step(self) -> None:
-        """Update editor, array canvas, and controls to match current_step_index."""
+        """Update editor, visualization canvas, and controls to match current_step_index."""
         if not self.history:
             return
 
@@ -256,24 +277,8 @@ class MainWindow:
         if self.current_step_index == -1:
             # Initial state before algorithm begins
             self.editor.clear_highlight()
-            if self.history and len(self.history) > 0 and self.history.events[0].metadata.get("linked_list"):
-                self.array_view.pack_forget()
-                self.tree_view.pack_forget()
-                self.linked_list_view.pack(fill=tk.BOTH, expand=True)
-                self.linked_list_view.render_event(self.history.events[0])
-                self.lbl_viz.config(text="Linked List Execution Visualization")
-            elif self.history and len(self.history) > 0 and self.history.events[0].metadata.get("tree"):
-                self.array_view.pack_forget()
-                self.linked_list_view.pack_forget()
-                self.tree_view.pack(fill=tk.BOTH, expand=True)
-                self.tree_view.render_event(self.history.events[0])
-                self.lbl_viz.config(text="Binary Tree Execution Visualization")
-            else:
-                self.linked_list_view.pack_forget()
-                self.tree_view.pack_forget()
-                self.array_view.pack(fill=tk.BOTH, expand=True)
-                self.array_view.set_array(self.history.initial_array)
-                self.lbl_viz.config(text="Array Execution Visualization")
+            kind, initial_event = self._initial_view()
+            self._render_view(kind, initial_event)
 
             self.controls.set_state(
                 total_steps=total,
@@ -284,26 +289,9 @@ class MainWindow:
 
         event: ExecutionEvent = self.history.get_step(self.current_step_index)
 
-        # 1. Update Visualization Views
-        if event.metadata.get("linked_list"):
-            self.array_view.pack_forget()
-            self.tree_view.pack_forget()
-            self.linked_list_view.pack(fill=tk.BOTH, expand=True)
-            self.linked_list_view.render_event(event)
-            self.lbl_viz.config(text="Linked List Execution Visualization")
-        elif event.metadata.get("tree"):
-            self.array_view.pack_forget()
-            self.linked_list_view.pack_forget()
-            self.tree_view.pack(fill=tk.BOTH, expand=True)
-            self.tree_view.render_event(event)
-            self.lbl_viz.config(text="Binary Tree Execution Visualization")
-        else:
-            self.linked_list_view.pack_forget()
-            self.tree_view.pack_forget()
-            self.array_view.pack(fill=tk.BOTH, expand=True)
-            view_state = EventProcessor.process_event(event)
-            self.array_view.set_array_state(view_state)
-            self.lbl_viz.config(text="Array Execution Visualization")
+        # 1. Update Visualization View
+        kind, view_event = self._event_view(event)
+        self._render_view(kind, view_event)
 
         # 2. Update Code Editor Line Highlight
         if event.line_number:
@@ -318,6 +306,60 @@ class MainWindow:
             current_step=self.current_step_index,
             details_text=details,
         )
+
+    def _initial_view(self) -> tuple[str, Optional[ExecutionEvent]]:
+        """Select the visualization kind for the pre-execution state."""
+        if not self.history or not self.history.events:
+            return "array", None
+
+        first_event = self.history.events[0]
+        for kind in ("graph", "linked_list", "tree"):
+            if first_event.metadata.get(kind):
+                return kind, first_event
+        return "array", None
+
+    def _event_view(self, event: ExecutionEvent) -> tuple[str, ExecutionEvent]:
+        """Select the visualization kind for a recorded execution event.
+
+        Graph state takes precedence because graph algorithms commonly use
+        pointer-like locals (``node``, ``curr``) that node-structure heuristics
+        may also recognize.
+        """
+        for kind in ("graph", "linked_list", "tree"):
+            if event.metadata.get(kind):
+                return kind, event
+        return "array", event
+
+    def _render_view(self, kind: str, event: Optional[ExecutionEvent]) -> None:
+        """Show the visualization for kind and render the supplied event/state."""
+        views = {
+            "array": self.array_view,
+            "linked_list": self.linked_list_view,
+            "tree": self.tree_view,
+            "graph": self.graph_view,
+        }
+        labels = {
+            "array": "Array Execution Visualization",
+            "linked_list": "Linked List Execution Visualization",
+            "tree": "Binary Tree Execution Visualization",
+            "graph": "Graph Execution Visualization",
+        }
+
+        for name, view in views.items():
+            if name == kind:
+                view.pack(fill=tk.BOTH, expand=True)
+            else:
+                view.pack_forget()
+
+        self.lbl_viz.config(text=labels.get(kind, labels["array"]))
+
+        if kind == "array":
+            if event is None:
+                self.array_view.set_array(self.history.initial_array if self.history else [])
+            else:
+                self.array_view.set_array_state(EventProcessor.process_event(event))
+        elif event is not None:
+            views[kind].render_event(event)
 
     def _format_event_description(self, event: ExecutionEvent) -> str:
         """Generate human-readable description for an execution event."""

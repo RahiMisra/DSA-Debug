@@ -90,21 +90,38 @@ def _find_target_function(
     return user_functions[0][1], user_functions[0][0], None
 
 
+def _deserialize_value(value: Any) -> Any:
+    """Recursively restore typed IPC values, nodes, containers, and dictionary keys."""
+    if isinstance(value, dict):
+        value_type = value.get("__type__")
+        if value_type == "ListNode":
+            return ListNode.from_list(value.get("values", []))
+        if value_type == "TreeNode":
+            return TreeNode.from_level_order(value.get("values", []))
+        if value_type == "dict":
+            return {
+                _deserialize_value(key): _deserialize_value(item)
+                for key, item in value.get("items", [])
+            }
+        return {
+            key: _deserialize_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_deserialize_value(item) for item in value]
+    return value
+
+
 def _deserialize_initial_data(data: Any) -> Any:
     """Convert IPC data back into native models (ListNode, TreeNode) or parsed inputs."""
     if isinstance(data, dict):
-        out = {}
-        for k, v in data.items():
-            if isinstance(v, dict) and v.get("__type__") == "ListNode":
-                out[k] = ListNode.from_list(v.get("values", []))
-            elif isinstance(v, dict) and v.get("__type__") == "TreeNode":
-                out[k] = TreeNode.from_level_order(v.get("values", []))
-            else:
-                out[k] = v
-        return out
+        return {
+            key: _deserialize_value(value)
+            for key, value in data.items()
+        }
     elif isinstance(data, str):
         return parse_leetcode_inputs(data)
-    return data
+    return _deserialize_value(data)
 
 
 def execute_code(

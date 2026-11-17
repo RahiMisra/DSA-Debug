@@ -9,6 +9,7 @@ from src.visualization.array_state import (
     ElementHighlight,
 )
 from src.visualization.event_processor import EventProcessor
+from src.visualization.graph_canvas import GraphCanvas, compute_graph_layout
 from src.visualization.linked_list_canvas import LinkedListCanvas
 from src.visualization.tree_canvas import BinaryTreeCanvas
 
@@ -22,4 +23,6 @@ __all__ = [
     "EventProcessor",
     "LinkedListCanvas",
     "BinaryTreeCanvas",
+    "GraphCanvas",
+    "compute_graph_layout",
 ]
