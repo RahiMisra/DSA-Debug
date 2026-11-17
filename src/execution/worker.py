@@ -184,6 +184,7 @@ def execute_code(
         "__trace_swap__": tracer.trace_swap,
         "__trace_write__": tracer.trace_write,
         "__trace_read__": tracer.trace_read,
+        "__trace_container_call__": tracer.trace_container_call,
     }
     old_stdout = sys.stdout
     old_stderr = sys.stderr

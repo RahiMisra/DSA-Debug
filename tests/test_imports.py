@@ -30,6 +30,7 @@ import pytest
         "src.visualization.linked_list_canvas",
         "src.visualization.tree_canvas",
         "src.visualization.graph_canvas",
+        "src.visualization.auxiliary_canvas",
     ],
 )
 def test_module_imports(module_name: str) -> None:

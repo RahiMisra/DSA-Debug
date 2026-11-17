@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import types
+from collections import deque
 from collections.abc import Iterable, Mapping
 from typing import Any, Optional
 
@@ -47,6 +49,10 @@ GRAPH_VISITED_VAR_NAMES = ("visited", "seen", "explored")
 GRAPH_FRONTIER_VAR_NAMES = (
     "queue", "q", "stack", "st", "frontier", "to_visit", "toVisit"
 )
+
+# Auxiliary linear container heuristics (Phase 11).
+AUX_STACK_NAMES = {"stack", "st", "s"}
+AUX_QUEUE_NAMES = {"queue", "q", "fifo", "deque", "dq"}
 
 
 def extract_linked_list_state(f_locals: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -404,6 +410,74 @@ def extract_graph_state(f_locals: dict[str, Any]) -> Optional[dict[str, Any]]:
     return state
 
 
+def _normalized_container_name(name: str) -> str:
+    """Normalize a variable name for auxiliary container heuristics."""
+    return re.sub(r"[\d_]+$", "", name.strip().lower())
+
+
+def classify_auxiliary_container(name: str, value: Any) -> Optional[str]:
+    """Return ``"stack"``, ``"queue"``, or None for a local variable.
+
+    Names provide the primary signal (``stack``/``st``/``s`` versus
+    ``queue``/``q``/``fifo``). ``collections.deque`` values without a matching
+    name are treated as queues because deques are predominantly used as FIFO
+    containers. Plain lists without a matching name are ignored to avoid
+    surfacing every intermediate result list as an auxiliary container.
+    """
+    is_list = isinstance(value, list)
+    is_deque = isinstance(value, deque)
+    if not (is_list or is_deque):
+        return None
+
+    base = _normalized_container_name(name)
+    if not base:
+        return None
+
+    if base in AUX_QUEUE_NAMES or base.endswith("queue") or base.endswith("_q"):
+        return "queue"
+    if base in AUX_STACK_NAMES or base.endswith("stack") or base.endswith("_st"):
+        return "stack"
+    if is_deque:
+        return "queue"
+    return None
+
+
+def _linear_container_snapshot(name: str, kind: str, container: Any) -> dict[str, Any]:
+    """Build a serializable snapshot for one stack or queue."""
+    items = list(container)
+    snapshot: dict[str, Any] = {
+        "name": name,
+        "kind": kind,
+        "items": items,
+        "size": len(items),
+    }
+    if kind == "stack":
+        snapshot["top"] = items[-1] if items else None
+    else:
+        snapshot["front"] = items[0] if items else None
+        snapshot["rear"] = items[-1] if items else None
+    return snapshot
+
+
+def extract_auxiliary_linear_state(
+    f_locals: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Extract auxiliary stacks and queues with their current item snapshots."""
+    stacks: list[dict[str, Any]] = []
+    queues: list[dict[str, Any]] = []
+
+    for name, value in f_locals.items():
+        kind = classify_auxiliary_container(name, value)
+        if kind == "stack":
+            stacks.append(_linear_container_snapshot(name, kind, value))
+        elif kind == "queue":
+            queues.append(_linear_container_snapshot(name, kind, value))
+
+    if not stacks and not queues:
+        return None
+    return {"stacks": stacks, "queues": queues}
+
+
 def evaluate_comparison(left_val: Any, right_val: Any, op_str: str) -> bool:
     """Evaluate comparison operator between two values."""
     if op_str == "<":
@@ -445,6 +519,7 @@ class ExecutionTracer:
         self.current_ll_state: Optional[dict[str, Any]] = None
         self.current_tree_state: Optional[dict[str, Any]] = None
         self.current_graph_state: Optional[dict[str, Any]] = None
+        self.current_aux_state: Optional[dict[str, Any]] = None
 
     def bind_array(self, target_array: list[int]) -> None:
         """Bind the active mutable array passed into the user function."""
@@ -458,8 +533,9 @@ class ExecutionTracer:
         """Return metadata for the structures currently being visualized.
 
         Every recorded event carries these snapshots so the UI can keep showing
-        a linked list, tree, or graph instead of falling back to the array view
-        on events that do not touch array elements (e.g. reads and writes).
+        a linked list, tree, graph, or auxiliary container instead of falling
+        back to the array view on events that do not touch array elements
+        (e.g. reads and writes).
         """
         metadata: dict[str, Any] = {}
         if self.current_ll_state is not None:
@@ -468,6 +544,8 @@ class ExecutionTracer:
             metadata["tree"] = self.current_tree_state
         if self.current_graph_state is not None:
             metadata["graph"] = self.current_graph_state
+        if self.current_aux_state is not None:
+            metadata["auxiliary"] = self.current_aux_state
         return metadata
 
     def _add_event(
@@ -522,6 +600,10 @@ class ExecutionTracer:
             graph_state = extract_graph_state(frame.f_locals)
             if graph_state is not None:
                 self.current_graph_state = graph_state
+        if self.current_aux_state is not None:
+            aux_state = extract_auxiliary_linear_state(frame.f_locals)
+            if aux_state is not None:
+                self.current_aux_state = aux_state
 
     def trace_line(
         self,
@@ -540,6 +622,9 @@ class ExecutionTracer:
             graph_state = extract_graph_state(frame.f_locals)
             if graph_state is not None:
                 self.current_graph_state = graph_state
+            aux_state = extract_auxiliary_linear_state(frame.f_locals)
+            if aux_state is not None:
+                self.current_aux_state = aux_state
 
         return self._add_event(
             event_type=EventType.LINE,
@@ -666,6 +751,61 @@ class ExecutionTracer:
                 metadata={"index": idx, "value": val},
             )
         return val
+
+    def trace_container_call(
+        self,
+        container: Any,
+        name: str,
+        method: str,
+        args: tuple[Any, ...] = (),
+        lineno: Optional[int] = None,
+    ) -> Any:
+        """Perform and record a stack/queue operation.
+
+        Wraps mutating calls such as ``stack.append(x)`` and
+        ``queue.popleft()`` so the original return value is preserved while the
+        auxiliary container state is captured for visualization.
+        """
+        effective_line = lineno if lineno is not None else self.current_line
+        result = getattr(container, method)(*args)
+
+        kind = classify_auxiliary_container(name, container)
+        if kind is None:
+            return result
+
+        frame = self._caller_frame()
+        if frame is not None:
+            self._refresh_structure_states(frame)
+            if self.current_aux_state is None:
+                aux_state = extract_auxiliary_linear_state(frame.f_locals)
+                if aux_state is not None:
+                    self.current_aux_state = aux_state
+
+        if method == "append":
+            action = "push" if kind == "stack" else "enqueue"
+            value = args[0] if args else None
+        elif method == "popleft" or kind == "queue":
+            action = "dequeue"
+            value = result
+        else:
+            action = "pop"
+            value = result
+
+        self._add_event(
+            event_type=EventType.CONTAINER,
+            line_number=effective_line,
+            array_state=self.get_array_snapshot(),
+            values=[value],
+            metadata={
+                "container_op": {
+                    "name": name,
+                    "kind": kind,
+                    "action": action,
+                    "value": value,
+                }
+            },
+        )
+        return result
 
     def _trace_dispatch(self, frame: types.FrameType, event: str, arg: Any) -> Any:
         """Trace dispatch function invoked by sys.settrace."""

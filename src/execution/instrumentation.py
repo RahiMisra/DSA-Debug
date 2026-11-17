@@ -5,6 +5,10 @@ from __future__ import annotations
 import ast
 from typing import Any, Optional
 
+# Methods that mutate auxiliary stacks and queues.
+CONTAINER_METHODS = {"append", "pop", "popleft"}
+
+
 COMPARE_OPS: dict[type[ast.cmpop], str] = {
     ast.Lt: "<",
     ast.LtE: "<=",
@@ -109,6 +113,33 @@ class TraceInstrumenter(ast.NodeTransformer):
             )
             new_node = ast.Expr(value=write_call)
             return ast.copy_location(new_node, node)
+
+        return self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        """Instrument stack/queue mutations on simple local variable receivers."""
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.attr in CONTAINER_METHODS
+            and not node.keywords
+            and not any(isinstance(arg, ast.Starred) for arg in node.args)
+        ):
+            visited_args = [self.visit(arg) for arg in node.args]
+            args_tuple = ast.Tuple(elts=visited_args, ctx=ast.Load())
+            container_call = ast.Call(
+                func=ast.Name(id="__trace_container_call__", ctx=ast.Load()),
+                args=[
+                    func.value,
+                    ast.Constant(value=func.value.id),
+                    ast.Constant(value=func.attr),
+                    args_tuple,
+                    ast.Constant(value=node.lineno),
+                ],
+                keywords=[],
+            )
+            return ast.copy_location(container_call, node)
 
         return self.generic_visit(node)
 

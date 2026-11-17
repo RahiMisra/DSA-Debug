@@ -8,6 +8,8 @@ from src.execution.result import ExecutionError, ExecutionResult, ExecutionStatu
 from src.execution.runner import CodeRunner, execute_code
 from src.execution.tracer import (
     ExecutionTracer,
+    classify_auxiliary_container,
+    extract_auxiliary_linear_state,
     extract_graph_state,
     extract_linked_list_state,
     extract_tree_state,
@@ -28,6 +30,8 @@ __all__ = [
     "extract_linked_list_state",
     "extract_tree_state",
     "extract_graph_state",
+    "classify_auxiliary_container",
+    "extract_auxiliary_linear_state",
     "ListNode",
     "TreeNode",
     "Graph",

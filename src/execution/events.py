@@ -16,6 +16,7 @@ class EventType(str, Enum):
     SWAP = "SWAP"
     WRITE = "WRITE"
     READ = "READ"
+    CONTAINER = "CONTAINER"
 
 
 def _safe_json_value(val: Any) -> Any:

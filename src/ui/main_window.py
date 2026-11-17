@@ -12,6 +12,7 @@ from src.ui.array_view import ArrayView
 from src.ui.code_editor import CodeEditor
 from src.ui.execution_controls import ExecutionControls
 from src.ui.input_panel import InputPanel
+from src.visualization.auxiliary_canvas import AuxiliaryLinearCanvas
 from src.visualization.event_processor import EventProcessor
 from src.visualization.graph_canvas import GraphCanvas
 from src.visualization.linked_list_canvas import LinkedListCanvas
@@ -128,6 +129,7 @@ class MainWindow:
         self.linked_list_view = LinkedListCanvas(viz_container)
         self.tree_view = BinaryTreeCanvas(viz_container)
         self.graph_view = GraphCanvas(viz_container)
+        self.auxiliary_view = AuxiliaryLinearCanvas(viz_container)
 
         center_frame.add(viz_container, minsize=400)
 
@@ -177,6 +179,23 @@ class MainWindow:
                     if isConnected[node][neighbor] == 1 and not visited[neighbor]:
                         stack.append(neighbor)
     return provinces
+"""
+            self.editor.set_code(code)
+        elif preset_name == "Stack / Queue":
+            code = """from collections import deque
+
+def stack_and_queue(nums):
+    stack = []
+    queue = deque()
+    for n in nums:
+        stack.append(n)
+        queue.append(n)
+    result = []
+    while stack:
+        result.append(stack.pop())
+    while queue:
+        result.append(queue.popleft())
+    return result
 """
             self.editor.set_code(code)
         elif preset_name in ("Array", "Random Array"):
@@ -345,12 +364,24 @@ class MainWindow:
             "graph": "Graph Execution Visualization",
         }
 
-        for name, view in views.items():
-            if name == kind:
-                view.pack(fill=tk.BOTH, expand=True)
-            else:
-                view.pack_forget()
+        for view in views.values():
+            view.pack_forget()
+        self.auxiliary_view.pack_forget()
 
+        auxiliary_state = event.metadata.get("auxiliary") if event is not None else None
+        if auxiliary_state and (
+            auxiliary_state.get("stacks") or auxiliary_state.get("queues")
+        ):
+            self.auxiliary_view.render_event(event)
+            self.auxiliary_view.pack(
+                side=tk.BOTTOM,
+                fill=tk.X,
+                expand=False,
+                padx=6,
+                pady=(0, 4),
+            )
+
+        views[kind].pack(fill=tk.BOTH, expand=True)
         self.lbl_viz.config(text=labels.get(kind, labels["array"]))
 
         if kind == "array":
@@ -391,6 +422,14 @@ class MainWindow:
             idx = event.indices[0] if event.indices else "?"
             val = event.values[0] if event.values else "?"
             return f"{line_prefix}Read arr[{idx}] = {val}"
+
+        elif event.event_type == EventType.CONTAINER:
+            op = event.metadata.get("container_op", {})
+            name = op.get("name", "container")
+            action = op.get("action", "operation")
+            value = op.get("value")
+            value_str = "" if value is None else f" {value}"
+            return f"{line_prefix}{name} {action}{value_str}"
 
         elif event.event_type == EventType.LINE:
             return f"{line_prefix}Executed line {event.line_number}"
