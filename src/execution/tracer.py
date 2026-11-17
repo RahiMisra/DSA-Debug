@@ -54,6 +54,27 @@ GRAPH_FRONTIER_VAR_NAMES = (
 AUX_STACK_NAMES = {"stack", "st", "s"}
 AUX_QUEUE_NAMES = {"queue", "q", "fifo", "deque", "dq"}
 
+# Auxiliary hash structure heuristics (Phase 11, T032/T033).
+AUX_MAP_NAME_TOKENS = {
+    "visited",
+    "seen",
+    "count",
+    "counts",
+    "counter",
+    "freq",
+    "freqs",
+    "frequency",
+    "memo",
+    "cache",
+    "dp",
+    "table",
+    "lookup",
+    "map",
+    "mapping",
+    "histogram",
+}
+AUX_SET_NAME_TOKENS = {"visited", "seen", "unique"}
+
 
 def extract_linked_list_state(f_locals: dict[str, Any]) -> Optional[dict[str, Any]]:
     """Extract serializable linked list structure, pointer variables, and cycle state from frame locals."""
@@ -478,6 +499,101 @@ def extract_auxiliary_linear_state(
     return {"stacks": stacks, "queues": queues}
 
 
+def _auxiliary_name_tokens(name: str) -> set[str]:
+    """Split a variable name into lowercase identifier tokens."""
+    split_camel = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
+    tokens: set[str] = set()
+    for token in re.split(r"[^A-Za-z0-9]+", split_camel.lower()):
+        token = re.sub(r"\d+", "", token)
+        if token:
+            tokens.add(token)
+    return tokens
+
+
+def classify_auxiliary_hash(name: str, value: Any) -> Optional[str]:
+    """Return ``"map"``, ``"set"``, or None for a local variable.
+
+    Hash containers are discovered by name heuristics validated against the
+    runtime type: dictionaries (including ``Counter``/``defaultdict``) become
+    maps, and sets become sets. Unmatched dictionaries and sets are ignored to
+    avoid surfacing graph adjacency maps and unrelated lookup tables.
+    """
+    is_map = isinstance(value, dict)
+    is_set = isinstance(value, (set, frozenset))
+    if not (is_map or is_set):
+        return None
+
+    tokens = _auxiliary_name_tokens(name)
+    if not tokens:
+        return None
+
+    if tokens & AUX_MAP_NAME_TOKENS or tokens & AUX_SET_NAME_TOKENS:
+        return "map" if is_map else "set"
+    return None
+
+
+def _map_snapshot(name: str, mapping: dict[Any, Any]) -> dict[str, Any]:
+    """Build a serializable key/value snapshot for one hash map."""
+    entries = [
+        {"key": key, "value": value}
+        for key, value in mapping.items()
+    ]
+    return {
+        "name": name,
+        "kind": "map",
+        "entries": entries,
+        "size": len(entries),
+    }
+
+
+def _set_snapshot(name: str, values: Any) -> dict[str, Any]:
+    """Build a deterministic, serializable membership snapshot for one set."""
+    try:
+        items = sorted(values, key=lambda item: (type(item).__name__, repr(item)))
+    except TypeError:  # pragma: no cover - sorting uses repr as a stable fallback
+        items = list(values)
+    return {
+        "name": name,
+        "kind": "set",
+        "items": items,
+        "size": len(items),
+    }
+
+
+def extract_auxiliary_hash_state(
+    f_locals: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Extract auxiliary hash maps and sets with their current contents."""
+    maps: list[dict[str, Any]] = []
+    sets: list[dict[str, Any]] = []
+
+    for name, value in f_locals.items():
+        kind = classify_auxiliary_hash(name, value)
+        if kind == "map":
+            maps.append(_map_snapshot(name, value))
+        elif kind == "set":
+            sets.append(_set_snapshot(name, value))
+
+    if not maps and not sets:
+        return None
+    return {"maps": maps, "sets": sets}
+
+
+def extract_auxiliary_state(f_locals: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Extract all auxiliary stacks, queues, maps, and sets from locals."""
+    linear_state = extract_auxiliary_linear_state(f_locals)
+    hash_state = extract_auxiliary_hash_state(f_locals)
+    if linear_state is None and hash_state is None:
+        return None
+
+    state: dict[str, Any] = {"stacks": [], "queues": [], "maps": [], "sets": []}
+    if linear_state is not None:
+        state.update(linear_state)
+    if hash_state is not None:
+        state.update(hash_state)
+    return state
+
+
 def evaluate_comparison(left_val: Any, right_val: Any, op_str: str) -> bool:
     """Evaluate comparison operator between two values."""
     if op_str == "<":
@@ -601,7 +717,15 @@ class ExecutionTracer:
             if graph_state is not None:
                 self.current_graph_state = graph_state
         if self.current_aux_state is not None:
-            aux_state = extract_auxiliary_linear_state(frame.f_locals)
+            aux_state = extract_auxiliary_state(frame.f_locals)
+            if aux_state is not None:
+                self.current_aux_state = aux_state
+
+    def _sync_structure_states(self, frame: types.FrameType) -> None:
+        """Refresh tracked structures, including first-time auxiliary state."""
+        self._refresh_structure_states(frame)
+        if self.current_aux_state is None:
+            aux_state = extract_auxiliary_state(frame.f_locals)
             if aux_state is not None:
                 self.current_aux_state = aux_state
 
@@ -622,7 +746,7 @@ class ExecutionTracer:
             graph_state = extract_graph_state(frame.f_locals)
             if graph_state is not None:
                 self.current_graph_state = graph_state
-            aux_state = extract_auxiliary_linear_state(frame.f_locals)
+            aux_state = extract_auxiliary_state(frame.f_locals)
             if aux_state is not None:
                 self.current_aux_state = aux_state
 
@@ -642,6 +766,7 @@ class ExecutionTracer:
         left_idx: Any = None,
         right_arr: Any = None,
         right_idx: Any = None,
+        container_name: Optional[str] = None,
     ) -> bool:
         """Evaluate and record a comparison event."""
         effective_line = lineno if lineno is not None else self.current_line
@@ -659,6 +784,31 @@ class ExecutionTracer:
             "left_val": left_val,
             "right_val": right_val,
         }
+
+        if container_name and op_str in ("in", "not in"):
+            container_op: Optional[dict[str, Any]] = None
+            kind = classify_auxiliary_hash(container_name, right_val)
+            key = left_val
+            if kind is None:
+                kind = classify_auxiliary_hash(container_name, left_val)
+                key = right_val
+
+            if kind is not None:
+                frame = self._caller_frame()
+                if frame is not None:
+                    self._sync_structure_states(frame)
+                present = result if op_str == "in" else not result
+                container_op = {
+                    "name": container_name,
+                    "kind": kind,
+                    "action": "lookup",
+                    "key": key,
+                    "value": present,
+                    "present": present,
+                }
+
+            if container_op is not None:
+                meta["container_op"] = container_op
 
         self._add_event(
             event_type=EventType.COMPARISON,
@@ -702,19 +852,48 @@ class ExecutionTracer:
 
     def trace_write(
         self,
-        arr: list[Any],
-        idx: int,
+        arr: Any,
+        idx: Any,
         val: Any,
         lineno: Optional[int] = None,
+        container_name: Optional[str] = None,
     ) -> Any:
-        """Perform and record an array write arr[idx] = val."""
+        """Perform and record an array or hash-map write arr[idx] = val."""
         effective_line = lineno if lineno is not None else self.current_line
-        prev_val = arr[idx] if (0 <= idx < len(arr)) else None
+
+        is_mapping = isinstance(arr, dict)
+        if is_mapping:
+            prev_exists = idx in arr
+            prev_val = arr[idx] if prev_exists else None
+        else:
+            prev_val = arr[idx] if (0 <= idx < len(arr)) else None
+
         arr[idx] = val
 
         frame = self._caller_frame()
         if frame is not None:
-            self._refresh_structure_states(frame)
+            self._sync_structure_states(frame)
+
+        if is_mapping:
+            hash_kind = classify_auxiliary_hash(container_name or "", arr)
+            if hash_kind == "map":
+                self._add_event(
+                    event_type=EventType.CONTAINER,
+                    line_number=effective_line,
+                    array_state=self.get_array_snapshot(),
+                    values=[val],
+                    metadata={
+                        "container_op": {
+                            "name": container_name,
+                            "kind": "map",
+                            "action": "update" if prev_exists else "insert",
+                            "key": idx,
+                            "value": val,
+                            "previous_value": prev_val,
+                        }
+                    },
+                )
+                return val
 
         self._add_event(
             event_type=EventType.WRITE,
@@ -732,13 +911,37 @@ class ExecutionTracer:
 
     def trace_read(
         self,
-        arr: list[Any],
-        idx: int,
+        arr: Any,
+        idx: Any,
         lineno: Optional[int] = None,
+        container_name: Optional[str] = None,
     ) -> Any:
-        """Perform and record an array read arr[idx]."""
+        """Perform and record an array or hash-map read arr[idx]."""
         effective_line = lineno if lineno is not None else self.current_line
         val = arr[idx]
+
+        if isinstance(arr, dict):
+            hash_kind = classify_auxiliary_hash(container_name or "", arr)
+            if hash_kind == "map":
+                frame = self._caller_frame()
+                if frame is not None:
+                    self._sync_structure_states(frame)
+                self._add_event(
+                    event_type=EventType.CONTAINER,
+                    line_number=effective_line,
+                    array_state=self.get_array_snapshot(),
+                    values=[val],
+                    metadata={
+                        "container_op": {
+                            "name": container_name,
+                            "kind": "map",
+                            "action": "lookup",
+                            "key": idx,
+                            "value": val,
+                        }
+                    },
+                )
+            return val
 
         # Only record read event if reading from a list (e.g. array being inspected)
         if isinstance(arr, list):
@@ -760,50 +963,67 @@ class ExecutionTracer:
         args: tuple[Any, ...] = (),
         lineno: Optional[int] = None,
     ) -> Any:
-        """Perform and record a stack/queue operation.
+        """Perform and record a stack, queue, map, or set operation.
 
-        Wraps mutating calls such as ``stack.append(x)`` and
-        ``queue.popleft()`` so the original return value is preserved while the
-        auxiliary container state is captured for visualization.
+        Wraps calls such as ``stack.append(x)``, ``queue.popleft()``,
+        ``seen.add(x)``, and ``memo.pop(k)`` so the original return value is
+        preserved while auxiliary container state is captured for
+        visualization.
         """
         effective_line = lineno if lineno is not None else self.current_line
         result = getattr(container, method)(*args)
 
-        kind = classify_auxiliary_container(name, container)
-        if kind is None:
+        linear_kind = classify_auxiliary_container(name, container)
+        hash_kind = classify_auxiliary_hash(name, container)
+        if linear_kind is None and hash_kind is None:
             return result
 
         frame = self._caller_frame()
         if frame is not None:
-            self._refresh_structure_states(frame)
-            if self.current_aux_state is None:
-                aux_state = extract_auxiliary_linear_state(frame.f_locals)
-                if aux_state is not None:
-                    self.current_aux_state = aux_state
+            self._sync_structure_states(frame)
 
-        if method == "append":
-            action = "push" if kind == "stack" else "enqueue"
-            value = args[0] if args else None
-        elif method == "popleft" or kind == "queue":
-            action = "dequeue"
+        if hash_kind == "map":
+            if method != "pop":
+                return result
+            kind = "map"
+            action = "remove"
+            key = args[0] if args else None
             value = result
+        elif hash_kind == "set":
+            if method not in ("add", "remove", "discard"):
+                return result
+            kind = "set"
+            action = method
+            key = args[0] if args else None
+            value = key
         else:
-            action = "pop"
-            value = result
+            kind = linear_kind
+            key = None
+            if method == "append":
+                action = "push" if kind == "stack" else "enqueue"
+                value = args[0] if args else None
+            elif method == "popleft" or kind == "queue":
+                action = "dequeue"
+                value = result
+            else:
+                action = "pop"
+                value = result
+
+        operation: dict[str, Any] = {
+            "name": name,
+            "kind": kind,
+            "action": action,
+            "value": value,
+        }
+        if key is not None:
+            operation["key"] = key
 
         self._add_event(
             event_type=EventType.CONTAINER,
             line_number=effective_line,
             array_state=self.get_array_snapshot(),
             values=[value],
-            metadata={
-                "container_op": {
-                    "name": name,
-                    "kind": kind,
-                    "action": action,
-                    "value": value,
-                }
-            },
+            metadata={"container_op": operation},
         )
         return result
 

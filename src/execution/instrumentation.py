@@ -5,8 +5,8 @@ from __future__ import annotations
 import ast
 from typing import Any, Optional
 
-# Methods that mutate auxiliary stacks and queues.
-CONTAINER_METHODS = {"append", "pop", "popleft"}
+# Methods that mutate auxiliary stacks, queues, and hash sets.
+CONTAINER_METHODS = {"append", "pop", "popleft", "add", "remove", "discard"}
 
 
 COMPARE_OPS: dict[type[ast.cmpop], str] = {
@@ -76,6 +76,9 @@ class TraceInstrumenter(ast.NodeTransformer):
         ):
             target = node.targets[0]
             val_expr = self.visit(node.value)
+            container_name = (
+                target.value.id if isinstance(target.value, ast.Name) else None
+            )
             write_call = ast.Call(
                 func=ast.Name(id="__trace_write__", ctx=ast.Load()),
                 args=[
@@ -83,6 +86,7 @@ class TraceInstrumenter(ast.NodeTransformer):
                     target.slice,
                     val_expr,
                     ast.Constant(value=node.lineno),
+                    ast.Constant(value=container_name),
                 ],
                 keywords=[],
             )
@@ -101,6 +105,9 @@ class TraceInstrumenter(ast.NodeTransformer):
                 op=node.op,
                 right=val_expr,
             )
+            container_name = (
+                target.value.id if isinstance(target.value, ast.Name) else None
+            )
             write_call = ast.Call(
                 func=ast.Name(id="__trace_write__", ctx=ast.Load()),
                 args=[
@@ -108,6 +115,7 @@ class TraceInstrumenter(ast.NodeTransformer):
                     target.slice,
                     bin_op,
                     ast.Constant(value=node.lineno),
+                    ast.Constant(value=container_name),
                 ],
                 keywords=[],
             )
@@ -153,6 +161,14 @@ class TraceInstrumenter(ast.NodeTransformer):
                 left_arr, left_idx = self._extract_subscript_info(node.left)
                 right_arr, right_idx = self._extract_subscript_info(node.comparators[0])
 
+                # Membership tests can target an auxiliary set or map on the right.
+                container_name = (
+                    node.comparators[0].id
+                    if op_str in ("in", "not in")
+                    and isinstance(node.comparators[0], ast.Name)
+                    else None
+                )
+
                 # Mark inside_compare so child subscripts aren't wrapped in __trace_read__
                 prev_inside = self._inside_compare
                 self._inside_compare = True
@@ -173,6 +189,7 @@ class TraceInstrumenter(ast.NodeTransformer):
                         left_idx,
                         right_arr,
                         right_idx,
+                        ast.Constant(value=container_name),
                     ],
                     keywords=[],
                 )
@@ -187,13 +204,17 @@ class TraceInstrumenter(ast.NodeTransformer):
             and not self._inside_compare
             and not isinstance(node.slice, ast.Slice)
         ):
-            # Transform to __trace_read__(arr, idx, lineno)
+            # Transform to __trace_read__(arr, idx, lineno, container_name)
+            container_name = (
+                node.value.id if isinstance(node.value, ast.Name) else None
+            )
             read_call = ast.Call(
                 func=ast.Name(id="__trace_read__", ctx=ast.Load()),
                 args=[
                     self.visit(node.value),
                     self.visit(node.slice),
                     ast.Constant(value=node.lineno),
+                    ast.Constant(value=container_name),
                 ],
                 keywords=[],
             )

@@ -15,6 +15,7 @@ from src.ui.input_panel import InputPanel
 from src.visualization.auxiliary_canvas import AuxiliaryLinearCanvas
 from src.visualization.event_processor import EventProcessor
 from src.visualization.graph_canvas import GraphCanvas
+from src.visualization.hash_canvas import AuxiliaryHashCanvas
 from src.visualization.linked_list_canvas import LinkedListCanvas
 from src.visualization.tree_canvas import BinaryTreeCanvas
 
@@ -130,6 +131,7 @@ class MainWindow:
         self.tree_view = BinaryTreeCanvas(viz_container)
         self.graph_view = GraphCanvas(viz_container)
         self.auxiliary_view = AuxiliaryLinearCanvas(viz_container)
+        self.hash_view = AuxiliaryHashCanvas(viz_container)
 
         center_frame.add(viz_container, minsize=400)
 
@@ -196,6 +198,17 @@ def stack_and_queue(nums):
     while queue:
         result.append(queue.popleft())
     return result
+"""
+            self.editor.set_code(code)
+        elif preset_name == "Hash Map / Set":
+            code = """def hash_demo(nums):
+    counts = {}
+    seen = set()
+    for n in nums:
+        counts[n] = counts.get(n, 0) + 1
+        if n not in seen:
+            seen.add(n)
+    return len(counts)
 """
             self.editor.set_code(code)
         elif preset_name in ("Array", "Random Array"):
@@ -367,6 +380,7 @@ def stack_and_queue(nums):
         for view in views.values():
             view.pack_forget()
         self.auxiliary_view.pack_forget()
+        self.hash_view.pack_forget()
 
         auxiliary_state = event.metadata.get("auxiliary") if event is not None else None
         if auxiliary_state and (
@@ -374,6 +388,18 @@ def stack_and_queue(nums):
         ):
             self.auxiliary_view.render_event(event)
             self.auxiliary_view.pack(
+                side=tk.BOTTOM,
+                fill=tk.X,
+                expand=False,
+                padx=6,
+                pady=(0, 4),
+            )
+
+        if auxiliary_state and (
+            auxiliary_state.get("maps") or auxiliary_state.get("sets")
+        ):
+            self.hash_view.render_event(event)
+            self.hash_view.pack(
                 side=tk.BOTTOM,
                 fill=tk.X,
                 expand=False,
@@ -400,6 +426,12 @@ def stack_and_queue(nums):
             res = event.metadata.get("result", "")
             vals = event.values
             indices = event.indices
+            container_op = event.metadata.get("container_op")
+            if container_op and container_op.get("action") == "lookup":
+                name = container_op.get("name", "container")
+                key = container_op.get("key")
+                present = container_op.get("present", res)
+                return f"{line_prefix}{key} {op} {name} -> {present}"
             if len(indices) >= 2 and len(vals) >= 2:
                 return f"{line_prefix}Compared arr[{indices[0]}] ({vals[0]}) {op} arr[{indices[1]}] ({vals[1]}) -> {res}"
             return f"{line_prefix}Comparison {vals} with '{op}' -> {res}"
@@ -427,7 +459,29 @@ def stack_and_queue(nums):
             op = event.metadata.get("container_op", {})
             name = op.get("name", "container")
             action = op.get("action", "operation")
+            kind = op.get("kind")
+            key = op.get("key")
             value = op.get("value")
+
+            if kind == "map":
+                if action in ("insert", "update"):
+                    prev = op.get("previous_value")
+                    prev_str = (
+                        f" (was {prev})"
+                        if action == "update" and prev is not None
+                        else ""
+                    )
+                    return f"{line_prefix}{name}[{key}] = {value}{prev_str}"
+                if action == "lookup":
+                    return f"{line_prefix}Read {name}[{key}] = {value}"
+                if action == "remove":
+                    return f"{line_prefix}{name} removed {key} = {value}"
+            elif kind == "set":
+                if action == "add":
+                    return f"{line_prefix}{name} added {key}"
+                if action in ("remove", "discard"):
+                    return f"{line_prefix}{name} removed {key}"
+
             value_str = "" if value is None else f" {value}"
             return f"{line_prefix}{name} {action}{value_str}"
 

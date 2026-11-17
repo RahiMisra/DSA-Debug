@@ -114,6 +114,7 @@ class InputPanel(tk.Frame):
             ("Binary Tree", "root = [10, 5, 20, null, null, 15, 30], target = 15"),
             ("Graph", "isConnected = [[1, 1, 0], [1, 1, 0], [0, 0, 1]]"),
             ("Stack / Queue", "nums = [3, 1, 4, 1, 5]"),
+            ("Hash Map / Set", "nums = [2, 7, 2, 7, 3]"),
         ]
 
         for label, default_txt in presets:
