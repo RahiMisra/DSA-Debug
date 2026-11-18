@@ -58,4 +58,7 @@ def test_line_tracing_independent_of_ui() -> None:
     result = execute_code(code, [1, 2])
     assert result.is_success is True
     assert len(result.events) > 0
-    assert result.events[0]["line_number"] == 2
+    line_events = [
+        event for event in result.events if event.event_type == EventType.LINE
+    ]
+    assert line_events[0]["line_number"] == 2

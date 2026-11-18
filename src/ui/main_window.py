@@ -12,8 +12,13 @@ from src.ui.array_view import ArrayView
 from src.ui.code_editor import CodeEditor
 from src.ui.execution_controls import ExecutionControls
 from src.ui.input_panel import InputPanel
+from src.visualization.auxiliary_canvas import AuxiliaryLinearCanvas
+from src.visualization.dashboard import MultiViewDashboard
 from src.visualization.event_processor import EventProcessor
+from src.visualization.graph_canvas import GraphCanvas
+from src.visualization.hash_canvas import AuxiliaryHashCanvas
 from src.visualization.linked_list_canvas import LinkedListCanvas
+from src.visualization.recursion_canvas import RecursionCanvas
 from src.visualization.tree_canvas import BinaryTreeCanvas
 
 
@@ -121,11 +126,18 @@ class MainWindow:
             anchor="w",
         )
         self.lbl_viz.pack(fill=tk.X)
-        self.array_view = ArrayView(viz_container)
+        self.dashboard = MultiViewDashboard(viz_container)
+        self.dashboard.pack(fill=tk.BOTH, expand=True)
+
+        self.array_view = ArrayView(self.dashboard.primary)
         self.array_view.pack(fill=tk.BOTH, expand=True)
 
-        self.linked_list_view = LinkedListCanvas(viz_container)
-        self.tree_view = BinaryTreeCanvas(viz_container)
+        self.linked_list_view = LinkedListCanvas(self.dashboard.primary)
+        self.tree_view = BinaryTreeCanvas(self.dashboard.primary)
+        self.graph_view = GraphCanvas(self.dashboard.primary)
+        self.auxiliary_view = AuxiliaryLinearCanvas(self.dashboard.auxiliary)
+        self.hash_view = AuxiliaryHashCanvas(self.dashboard.auxiliary)
+        self.recursion_view = RecursionCanvas(self.dashboard.subwork)
 
         center_frame.add(viz_container, minsize=400)
 
@@ -157,6 +169,52 @@ class MainWindow:
         else:
             curr = curr.right
     return None
+"""
+            self.editor.set_code(code)
+        elif preset_name == "Graph":
+            code = """def count_provinces(isConnected):
+    n = len(isConnected)
+    visited = [False] * n
+    provinces = 0
+    for start in range(n):
+        if not visited[start]:
+            provinces += 1
+            stack = [start]
+            while stack:
+                node = stack.pop()
+                visited[node] = True
+                for neighbor in range(n):
+                    if isConnected[node][neighbor] == 1 and not visited[neighbor]:
+                        stack.append(neighbor)
+    return provinces
+"""
+            self.editor.set_code(code)
+        elif preset_name == "Stack / Queue":
+            code = """from collections import deque
+
+def stack_and_queue(nums):
+    stack = []
+    queue = deque()
+    for n in nums:
+        stack.append(n)
+        queue.append(n)
+    result = []
+    while stack:
+        result.append(stack.pop())
+    while queue:
+        result.append(queue.popleft())
+    return result
+"""
+            self.editor.set_code(code)
+        elif preset_name == "Hash Map / Set":
+            code = """def hash_demo(nums):
+    counts = {}
+    seen = set()
+    for n in nums:
+        counts[n] = counts.get(n, 0) + 1
+        if n not in seen:
+            seen.add(n)
+    return len(counts)
 """
             self.editor.set_code(code)
         elif preset_name in ("Array", "Random Array"):
@@ -210,7 +268,8 @@ class MainWindow:
         })
 
         self.current_step_index = -1
-        self.array_view.set_array(initial_array)
+        kind, initial_event = self._initial_view()
+        self._render_view(kind, initial_event)
         self.editor.clear_highlight()
 
         total = len(self.history)
@@ -247,7 +306,7 @@ class MainWindow:
         self._apply_current_step()
 
     def _apply_current_step(self) -> None:
-        """Update editor, array canvas, and controls to match current_step_index."""
+        """Update editor, visualization canvas, and controls to match current_step_index."""
         if not self.history:
             return
 
@@ -256,24 +315,8 @@ class MainWindow:
         if self.current_step_index == -1:
             # Initial state before algorithm begins
             self.editor.clear_highlight()
-            if self.history and len(self.history) > 0 and self.history.events[0].metadata.get("linked_list"):
-                self.array_view.pack_forget()
-                self.tree_view.pack_forget()
-                self.linked_list_view.pack(fill=tk.BOTH, expand=True)
-                self.linked_list_view.render_event(self.history.events[0])
-                self.lbl_viz.config(text="Linked List Execution Visualization")
-            elif self.history and len(self.history) > 0 and self.history.events[0].metadata.get("tree"):
-                self.array_view.pack_forget()
-                self.linked_list_view.pack_forget()
-                self.tree_view.pack(fill=tk.BOTH, expand=True)
-                self.tree_view.render_event(self.history.events[0])
-                self.lbl_viz.config(text="Binary Tree Execution Visualization")
-            else:
-                self.linked_list_view.pack_forget()
-                self.tree_view.pack_forget()
-                self.array_view.pack(fill=tk.BOTH, expand=True)
-                self.array_view.set_array(self.history.initial_array)
-                self.lbl_viz.config(text="Array Execution Visualization")
+            kind, initial_event = self._initial_view()
+            self._render_view(kind, initial_event)
 
             self.controls.set_state(
                 total_steps=total,
@@ -284,26 +327,9 @@ class MainWindow:
 
         event: ExecutionEvent = self.history.get_step(self.current_step_index)
 
-        # 1. Update Visualization Views
-        if event.metadata.get("linked_list"):
-            self.array_view.pack_forget()
-            self.tree_view.pack_forget()
-            self.linked_list_view.pack(fill=tk.BOTH, expand=True)
-            self.linked_list_view.render_event(event)
-            self.lbl_viz.config(text="Linked List Execution Visualization")
-        elif event.metadata.get("tree"):
-            self.array_view.pack_forget()
-            self.linked_list_view.pack_forget()
-            self.tree_view.pack(fill=tk.BOTH, expand=True)
-            self.tree_view.render_event(event)
-            self.lbl_viz.config(text="Binary Tree Execution Visualization")
-        else:
-            self.linked_list_view.pack_forget()
-            self.tree_view.pack_forget()
-            self.array_view.pack(fill=tk.BOTH, expand=True)
-            view_state = EventProcessor.process_event(event)
-            self.array_view.set_array_state(view_state)
-            self.lbl_viz.config(text="Array Execution Visualization")
+        # 1. Update Visualization View
+        kind, view_event = self._event_view(event)
+        self._render_view(kind, view_event)
 
         # 2. Update Code Editor Line Highlight
         if event.line_number:
@@ -319,6 +345,104 @@ class MainWindow:
             details_text=details,
         )
 
+    def _initial_view(self) -> tuple[str, Optional[ExecutionEvent]]:
+        """Select the visualization kind for the pre-execution state."""
+        if not self.history or not self.history.events:
+            return "array", None
+
+        first_event = self.history.events[0]
+        for kind in ("graph", "linked_list", "tree"):
+            if first_event.metadata.get(kind):
+                return kind, first_event
+        return "array", None
+
+    def _event_view(self, event: ExecutionEvent) -> tuple[str, ExecutionEvent]:
+        """Select the visualization kind for a recorded execution event.
+
+        Graph state takes precedence because graph algorithms commonly use
+        pointer-like locals (``node``, ``curr``) that node-structure heuristics
+        may also recognize.
+        """
+        for kind in ("graph", "linked_list", "tree"):
+            if event.metadata.get(kind):
+                return kind, event
+        return "array", event
+
+    def _render_view(self, kind: str, event: Optional[ExecutionEvent]) -> None:
+        """Show the visualization for kind and render the supplied event/state."""
+        views = {
+            "array": self.array_view,
+            "linked_list": self.linked_list_view,
+            "tree": self.tree_view,
+            "graph": self.graph_view,
+        }
+        labels = {
+            "array": "Array Execution Visualization",
+            "linked_list": "Linked List Execution Visualization",
+            "tree": "Binary Tree Execution Visualization",
+            "graph": "Graph Execution Visualization",
+        }
+
+        for view in views.values():
+            view.pack_forget()
+        self.auxiliary_view.pack_forget()
+        self.hash_view.pack_forget()
+        self.recursion_view.pack_forget()
+
+        auxiliary_state = event.metadata.get("auxiliary") if event is not None else None
+        show_linear = bool(
+            auxiliary_state
+            and (auxiliary_state.get("stacks") or auxiliary_state.get("queues"))
+        )
+        if show_linear:
+            self.auxiliary_view.render_event(event)
+            self.auxiliary_view.pack(fill=tk.BOTH, expand=True)
+
+        show_hash = bool(
+            auxiliary_state
+            and (auxiliary_state.get("maps") or auxiliary_state.get("sets"))
+        )
+        if show_hash:
+            self.hash_view.render_event(event)
+            self.hash_view.pack(fill=tk.BOTH, expand=True)
+
+        recursion_state = (
+            event.metadata.get("recursion") if event is not None else None
+        )
+        show_subwork = self._has_recursion_activity(recursion_state)
+        if show_subwork:
+            self.recursion_view.render_event(event)
+            self.recursion_view.pack(fill=tk.BOTH, expand=True)
+
+        self.dashboard.set_workspace_visible(
+            auxiliary=show_linear or show_hash,
+            subwork=show_subwork,
+        )
+
+        views[kind].pack(fill=tk.BOTH, expand=True)
+        self.lbl_viz.config(text=labels.get(kind, labels["array"]))
+
+        if kind == "array":
+            if event is None:
+                self.array_view.set_array(self.history.initial_array if self.history else [])
+            else:
+                self.array_view.set_array_state(EventProcessor.process_event(event))
+        elif event is not None:
+            views[kind].render_event(event)
+
+    @staticmethod
+    def _has_recursion_activity(state: Optional[dict]) -> bool:
+        """Return True when call-stack, sub-work, or return data is worth showing."""
+        if not state:
+            return False
+        frames = state.get("frames") or []
+        return bool(
+            len(frames) > 1
+            or state.get("subarrays")
+            or state.get("last_return") is not None
+            or state.get("return_structure") is not None
+        )
+
     def _format_event_description(self, event: ExecutionEvent) -> str:
         """Generate human-readable description for an execution event."""
         line_prefix = f"Line {event.line_number}: " if event.line_number else ""
@@ -327,6 +451,12 @@ class MainWindow:
             res = event.metadata.get("result", "")
             vals = event.values
             indices = event.indices
+            container_op = event.metadata.get("container_op")
+            if container_op and container_op.get("action") == "lookup":
+                name = container_op.get("name", "container")
+                key = container_op.get("key")
+                present = container_op.get("present", res)
+                return f"{line_prefix}{key} {op} {name} -> {present}"
             if len(indices) >= 2 and len(vals) >= 2:
                 return f"{line_prefix}Compared arr[{indices[0]}] ({vals[0]}) {op} arr[{indices[1]}] ({vals[1]}) -> {res}"
             return f"{line_prefix}Comparison {vals} with '{op}' -> {res}"
@@ -349,6 +479,54 @@ class MainWindow:
             idx = event.indices[0] if event.indices else "?"
             val = event.values[0] if event.values else "?"
             return f"{line_prefix}Read arr[{idx}] = {val}"
+
+        elif event.event_type == EventType.CONTAINER:
+            op = event.metadata.get("container_op", {})
+            name = op.get("name", "container")
+            action = op.get("action", "operation")
+            kind = op.get("kind")
+            key = op.get("key")
+            value = op.get("value")
+
+            if kind == "map":
+                if action in ("insert", "update"):
+                    prev = op.get("previous_value")
+                    prev_str = (
+                        f" (was {prev})"
+                        if action == "update" and prev is not None
+                        else ""
+                    )
+                    return f"{line_prefix}{name}[{key}] = {value}{prev_str}"
+                if action == "lookup":
+                    return f"{line_prefix}Read {name}[{key}] = {value}"
+                if action == "remove":
+                    return f"{line_prefix}{name} removed {key} = {value}"
+            elif kind == "set":
+                if action == "add":
+                    return f"{line_prefix}{name} added {key}"
+                if action in ("remove", "discard"):
+                    return f"{line_prefix}{name} removed {key}"
+
+            value_str = "" if value is None else f" {value}"
+            return f"{line_prefix}{name} {action}{value_str}"
+
+        elif event.event_type == EventType.CALL:
+            call = event.metadata.get("call", {})
+            function = call.get("function", "?")
+            depth = call.get("depth", 0)
+            args_text = ", ".join(
+                f"{key}={value}" for key, value in call.get("args", {}).items()
+            )
+            signature = f"({args_text})" if args_text else "()"
+            return f"{line_prefix}Called {function}{signature} at depth {depth}"
+
+        elif event.event_type == EventType.RETURN:
+            returned = event.metadata.get("return", {})
+            function = returned.get("function", "?")
+            depth = returned.get("depth", 0)
+            value = returned.get("value")
+            value_text = "None" if value is None else str(value)
+            return f"{line_prefix}Returned {function} -> {value_text} (depth {depth})"
 
         elif event.event_type == EventType.LINE:
             return f"{line_prefix}Executed line {event.line_number}"

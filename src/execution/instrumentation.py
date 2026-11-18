@@ -5,6 +5,10 @@ from __future__ import annotations
 import ast
 from typing import Any, Optional
 
+# Methods that mutate auxiliary stacks, queues, and hash sets.
+CONTAINER_METHODS = {"append", "pop", "popleft", "add", "remove", "discard"}
+
+
 COMPARE_OPS: dict[type[ast.cmpop], str] = {
     ast.Lt: "<",
     ast.LtE: "<=",
@@ -17,6 +21,19 @@ COMPARE_OPS: dict[type[ast.cmpop], str] = {
     ast.In: "in",
     ast.NotIn: "not in",
 }
+
+
+def _receiver_name(node: ast.AST) -> Optional[str]:
+    """Return a display name for a local or ``self.attribute`` receiver."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+    ):
+        return node.attr
+    return None
 
 
 class TraceInstrumenter(ast.NodeTransformer):
@@ -72,6 +89,7 @@ class TraceInstrumenter(ast.NodeTransformer):
         ):
             target = node.targets[0]
             val_expr = self.visit(node.value)
+            container_name = _receiver_name(target.value)
             write_call = ast.Call(
                 func=ast.Name(id="__trace_write__", ctx=ast.Load()),
                 args=[
@@ -79,6 +97,7 @@ class TraceInstrumenter(ast.NodeTransformer):
                     target.slice,
                     val_expr,
                     ast.Constant(value=node.lineno),
+                    ast.Constant(value=container_name),
                 ],
                 keywords=[],
             )
@@ -97,6 +116,7 @@ class TraceInstrumenter(ast.NodeTransformer):
                 op=node.op,
                 right=val_expr,
             )
+            container_name = _receiver_name(target.value)
             write_call = ast.Call(
                 func=ast.Name(id="__trace_write__", ctx=ast.Load()),
                 args=[
@@ -104,11 +124,40 @@ class TraceInstrumenter(ast.NodeTransformer):
                     target.slice,
                     bin_op,
                     ast.Constant(value=node.lineno),
+                    ast.Constant(value=container_name),
                 ],
                 keywords=[],
             )
             new_node = ast.Expr(value=write_call)
             return ast.copy_location(new_node, node)
+
+        return self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        """Instrument container mutations on local or ``self.attribute`` receivers."""
+        func = node.func
+        receiver = _receiver_name(func.value) if isinstance(func, ast.Attribute) else None
+        if (
+            isinstance(func, ast.Attribute)
+            and receiver is not None
+            and func.attr in CONTAINER_METHODS
+            and not node.keywords
+            and not any(isinstance(arg, ast.Starred) for arg in node.args)
+        ):
+            visited_args = [self.visit(arg) for arg in node.args]
+            args_tuple = ast.Tuple(elts=visited_args, ctx=ast.Load())
+            container_call = ast.Call(
+                func=ast.Name(id="__trace_container_call__", ctx=ast.Load()),
+                args=[
+                    func.value,
+                    ast.Constant(value=receiver),
+                    ast.Constant(value=func.attr),
+                    args_tuple,
+                    ast.Constant(value=node.lineno),
+                ],
+                keywords=[],
+            )
+            return ast.copy_location(container_call, node)
 
         return self.generic_visit(node)
 
@@ -121,6 +170,14 @@ class TraceInstrumenter(ast.NodeTransformer):
                 # Extract array/index metadata if operands are single subscripts
                 left_arr, left_idx = self._extract_subscript_info(node.left)
                 right_arr, right_idx = self._extract_subscript_info(node.comparators[0])
+
+                # Membership tests can target an auxiliary set or map on the right.
+                container_name = (
+                    node.comparators[0].id
+                    if op_str in ("in", "not in")
+                    and isinstance(node.comparators[0], ast.Name)
+                    else None
+                )
 
                 # Mark inside_compare so child subscripts aren't wrapped in __trace_read__
                 prev_inside = self._inside_compare
@@ -142,6 +199,7 @@ class TraceInstrumenter(ast.NodeTransformer):
                         left_idx,
                         right_arr,
                         right_idx,
+                        ast.Constant(value=container_name),
                     ],
                     keywords=[],
                 )
@@ -150,19 +208,41 @@ class TraceInstrumenter(ast.NodeTransformer):
         return self.generic_visit(node)
 
     def visit_Subscript(self, node: ast.Subscript) -> ast.AST:
-        """Instrument array read operations in Load context (ignoring slices)."""
+        """Instrument array reads and slice creation in Load context."""
+        if isinstance(node.ctx, ast.Load) and isinstance(node.slice, ast.Slice):
+            part = node.slice
+            container_name = _receiver_name(node.value)
+            lower = self.visit(part.lower) if part.lower is not None else ast.Constant(value=None)
+            upper = self.visit(part.upper) if part.upper is not None else ast.Constant(value=None)
+            step = self.visit(part.step) if part.step is not None else ast.Constant(value=None)
+            slice_call = ast.Call(
+                func=ast.Name(id="__trace_slice__", ctx=ast.Load()),
+                args=[
+                    self.visit(node.value),
+                    lower,
+                    upper,
+                    step,
+                    ast.Constant(value=container_name),
+                    ast.Constant(value=node.lineno),
+                ],
+                keywords=[],
+            )
+            return ast.copy_location(slice_call, node)
+
         if (
             isinstance(node.ctx, ast.Load)
             and not self._inside_compare
             and not isinstance(node.slice, ast.Slice)
         ):
-            # Transform to __trace_read__(arr, idx, lineno)
+            # Transform to __trace_read__(arr, idx, lineno, container_name)
+            container_name = _receiver_name(node.value)
             read_call = ast.Call(
                 func=ast.Name(id="__trace_read__", ctx=ast.Load()),
                 args=[
                     self.visit(node.value),
                     self.visit(node.slice),
                     ast.Constant(value=node.lineno),
+                    ast.Constant(value=container_name),
                 ],
                 keywords=[],
             )

@@ -11,12 +11,19 @@ Rather than relying on predefined animations, Trace executes user-submitted Pyth
 - **Actual Code Execution:** Runs the user's submitted Python code rather than playing a canned animation.
 - **Subprocess Isolation:** User code executes in a separate process with configurable timeout enforcement to protect against runaway programs or infinite loops.
 - **AST Tracing & Instrumentation:** Accurately detects and records comparisons (`<`, `>`, `<=`, etc.), element swaps (`arr[i], arr[j] = arr[j], arr[i]`), element writes (`arr[i] = ...`), and reads.
-- **Visual Array Canvas:** Dynamic bar chart representing elements, values, and indices.
+- **Visual Array Canvas:** Box-style cells with centered values and index labels (with an optional bar view).
 - **Operation Highlighting:**
   - 🟡 **Amber / Yellow:** Comparing elements
   - 🔴 **Red:** Swapping elements
   - 🟣 **Purple:** Modifying / writing elements
   - 🟢 **Emerald:** Reading elements
+- **Linked List & Binary Tree Views:** Pointer labels, node mutations, cycle arrows, and hierarchical tree layout.
+- **Graph View:** Circular vertex layout with directed/undirected edges, self-loops, and frontier/explored/current-node highlighting during BFS and DFS.
+- **Stack & Queue Panels:** Detects auxiliary stacks and queues (`stack`, `st`, `s`, `queue`, `q`, `fifo`, deques) and renders vertical LIFO towers and horizontal FIFO pipes with push/pop/enqueue/dequeue transitions.
+- **Hash Map & Set Panels:** Detects frequency maps, lookup tables, memo tables, and visited sets (`freq`, `count`, `memo`, `dp`, `table`, `visited`, `seen`, …) and renders key/value rows and membership badges with active-key/active-member highlighting.
+- **Recursion & Subwork Panel:** Tracks recursive call frames with depth, arguments, and return values; renders the active call stack deepest-first, intermediate list slices and recursive sub-array arguments, and a dedicated returned-structure panel.
+- **LeetCode `class Solution:` Support:** Auto-detects `Solution` classes, instantiates them, and runs bound methods with `self` handled automatically. Supports multi-parameter inputs such as `head`, `l1`/`l2`, `root`/`p`/`q`, grids, and `adjList` object graphs.
+- **Segmented Multi-View Dashboard:** Primary structure stays in the main viewport while stack/queue, hash map/set, recursion, sub-array, and returned-structure segments appear below when relevant.
 - **Synchronized Code Editor:** Displays source code with real-time line highlighting indicating the currently executing statement.
 - **Interactive Execution Controls:**
   - **Step Forward / Step Back:** Step through recorded execution event by event.
@@ -86,10 +93,19 @@ src/
 │   ├── tracer.py               # Tracing engine combining sys.settrace & runtime hooks
 │   ├── events.py               # ExecutionEvent and ExecutionHistory models
 │   ├── instrumentation.py      # AST NodeTransformer rewriting comparisons & mutations
+│   ├── models.py               # ListNode, TreeNode, and normalized Graph models
+│   ├── parsers.py              # LeetCode-style input parsing
 │   └── result.py               # ExecutionResult and ExecutionError models
 └── visualization/
     ├── array_state.py          # ArrayViewState and ElementHighlight definitions
-    └── event_processor.py      # Translates ExecutionEvents into visual states
+    ├── event_processor.py      # Translates ExecutionEvents into visual states
+    ├── linked_list_canvas.py   # Node/arrow linked list rendering
+    ├── tree_canvas.py          # Hierarchical binary tree rendering
+    ├── graph_canvas.py         # Circular graph rendering and traversal highlights
+    ├── auxiliary_canvas.py     # Stack towers and queue pipes with operation transitions
+    ├── hash_canvas.py          # Map key/value tables and set membership badges
+    ├── recursion_canvas.py     # Call stack, sub-array rows, and returned structure
+    └── dashboard.py            # Primary + auxiliary + subwork segmented layout
 ```
 
 ---
@@ -102,3 +118,7 @@ Trace has been validated against all five initial sorting algorithms:
 3. **Insertion Sort** (in-place)
 4. **Quick Sort** (in-place partition)
 5. **Merge Sort** (in-place sub-array merging)
+
+Graph traversal tracking is validated with BFS over adjacency lists and matrices, including frontier/explored state and active-edge highlighting. Stack and queue tracking is validated with LIFO/FIFO sequences, container snapshots, and operation highlighting. Hash map and set tracking is validated with dict insert/update/lookup/membership operations, set add/remove/membership operations, active-key highlighting, and simultaneous queue + visited-set panels. Recursion tracking is validated with recursive factorial call frames/returns, merge-sort slice and recursive-argument sub-arrays, returned structures, and call-stack panel synchronization.
+
+LeetCode Solution integration is validated end-to-end for Reverse Linked List, Merge Two Sorted Lists, Maximum Depth, Invert Binary Tree, Validate BST, Number of Islands, Clone Graph, Valid Parentheses, a queue built from stacks, Two Sum, and Group Anagrams. The dashboard suite also verifies that primary, auxiliary, sub-array, and returned-structure segments can be displayed together.

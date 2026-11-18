@@ -29,6 +29,11 @@ import pytest
         "src.visualization.event_processor",
         "src.visualization.linked_list_canvas",
         "src.visualization.tree_canvas",
+        "src.visualization.graph_canvas",
+        "src.visualization.auxiliary_canvas",
+        "src.visualization.hash_canvas",
+        "src.visualization.recursion_canvas",
+        "src.visualization.dashboard",
     ],
 )
 def test_module_imports(module_name: str) -> None:

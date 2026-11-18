@@ -13,6 +13,21 @@ from src.execution.result import ExecutionResult, ExecutionStatus
 DEFAULT_TIMEOUT_SECONDS = 3.0
 
 
+def _serialize_nested_value(value: Any) -> Any:
+    """Serialize nested values, preserving dictionary key types across JSON IPC."""
+    if isinstance(value, (list, tuple)):
+        return [_serialize_nested_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            "__type__": "dict",
+            "items": [
+                [_serialize_nested_value(key), _serialize_nested_value(item)]
+                for key, item in value.items()
+            ],
+        }
+    return value
+
+
 def _serialize_for_ipc(data: Any) -> Any:
     """Serialize data structures for JSON IPC transmission to worker."""
     if isinstance(data, dict):
@@ -23,9 +38,9 @@ def _serialize_for_ipc(data: Any) -> Any:
             elif hasattr(v, "to_level_order") and callable(v.to_level_order):
                 out[k] = {"__type__": "TreeNode", "values": v.to_level_order()}
             else:
-                out[k] = v
+                out[k] = _serialize_nested_value(v)
         return out
-    return data
+    return _serialize_nested_value(data)
 
 
 def execute_code(

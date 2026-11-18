@@ -44,6 +44,25 @@ def selection_sort(arr):
     assert result.final_array == [10, 13, 14, 29, 37]
 
 
+def test_auto_detect_prefers_sort_over_declaration_order() -> None:
+    """Verify a helper defined first does not shadow an unselected sort function."""
+    code = """
+def helper(x):
+    return x
+
+def bubble_sort(arr):
+    n = len(arr)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if arr[j] > arr[j + 1]:
+                arr[j], arr[j + 1] = arr[j + 1], arr[j]
+"""
+    result = execute_code(code, [3, 1, 2])
+
+    assert result.is_success is True, result.error
+    assert result.final_array == [1, 2, 3]
+
+
 def test_execute_empty_and_single_element_arrays() -> None:
     """Verify executing on empty and single-element arrays."""
     code = """
