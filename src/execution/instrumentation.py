@@ -198,7 +198,29 @@ class TraceInstrumenter(ast.NodeTransformer):
         return self.generic_visit(node)
 
     def visit_Subscript(self, node: ast.Subscript) -> ast.AST:
-        """Instrument array read operations in Load context (ignoring slices)."""
+        """Instrument array reads and slice creation in Load context."""
+        if isinstance(node.ctx, ast.Load) and isinstance(node.slice, ast.Slice):
+            part = node.slice
+            container_name = (
+                node.value.id if isinstance(node.value, ast.Name) else None
+            )
+            lower = self.visit(part.lower) if part.lower is not None else ast.Constant(value=None)
+            upper = self.visit(part.upper) if part.upper is not None else ast.Constant(value=None)
+            step = self.visit(part.step) if part.step is not None else ast.Constant(value=None)
+            slice_call = ast.Call(
+                func=ast.Name(id="__trace_slice__", ctx=ast.Load()),
+                args=[
+                    self.visit(node.value),
+                    lower,
+                    upper,
+                    step,
+                    ast.Constant(value=container_name),
+                    ast.Constant(value=node.lineno),
+                ],
+                keywords=[],
+            )
+            return ast.copy_location(slice_call, node)
+
         if (
             isinstance(node.ctx, ast.Load)
             and not self._inside_compare

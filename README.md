@@ -21,6 +21,7 @@ Rather than relying on predefined animations, Trace executes user-submitted Pyth
 - **Graph View:** Circular vertex layout with directed/undirected edges, self-loops, and frontier/explored/current-node highlighting during BFS and DFS.
 - **Stack & Queue Panels:** Detects auxiliary stacks and queues (`stack`, `st`, `s`, `queue`, `q`, `fifo`, deques) and renders vertical LIFO towers and horizontal FIFO pipes with push/pop/enqueue/dequeue transitions.
 - **Hash Map & Set Panels:** Detects frequency maps, lookup tables, memo tables, and visited sets (`freq`, `count`, `memo`, `dp`, `table`, `visited`, `seen`, …) and renders key/value rows and membership badges with active-key/active-member highlighting.
+- **Recursion & Subwork Panel:** Tracks recursive call frames with depth, arguments, and return values; renders the active call stack deepest-first, intermediate list slices and recursive sub-array arguments, and a dedicated returned-structure panel.
 - **Synchronized Code Editor:** Displays source code with real-time line highlighting indicating the currently executing statement.
 - **Interactive Execution Controls:**
   - **Step Forward / Step Back:** Step through recorded execution event by event.
@@ -100,7 +101,8 @@ src/
     ├── tree_canvas.py          # Hierarchical binary tree rendering
     ├── graph_canvas.py         # Circular graph rendering and traversal highlights
     ├── auxiliary_canvas.py     # Stack towers and queue pipes with operation transitions
-    └── hash_canvas.py          # Map key/value tables and set membership badges
+    ├── hash_canvas.py          # Map key/value tables and set membership badges
+    └── recursion_canvas.py     # Call stack, sub-array rows, and returned structure
 ```
 
 ---
@@ -114,4 +116,4 @@ Trace has been validated against all five initial sorting algorithms:
 4. **Quick Sort** (in-place partition)
 5. **Merge Sort** (in-place sub-array merging)
 
-Graph traversal tracking is validated with BFS over adjacency lists and matrices, including frontier/explored state and active-edge highlighting. Stack and queue tracking is validated with LIFO/FIFO sequences, container snapshots, and operation highlighting. Hash map and set tracking is validated with dict insert/update/lookup/membership operations, set add/remove/membership operations, active-key highlighting, and simultaneous queue + visited-set panels.
+Graph traversal tracking is validated with BFS over adjacency lists and matrices, including frontier/explored state and active-edge highlighting. Stack and queue tracking is validated with LIFO/FIFO sequences, container snapshots, and operation highlighting. Hash map and set tracking is validated with dict insert/update/lookup/membership operations, set add/remove/membership operations, active-key highlighting, and simultaneous queue + visited-set panels. Recursion tracking is validated with recursive factorial call frames/returns, merge-sort slice and recursive-argument sub-arrays, returned structures, and call-stack panel synchronization.

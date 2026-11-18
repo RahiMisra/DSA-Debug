@@ -75,6 +75,10 @@ AUX_MAP_NAME_TOKENS = {
 }
 AUX_SET_NAME_TOKENS = {"visited", "seen", "unique"}
 
+# Recursion and sub-work tracking heuristics (Phase 12).
+CHOSEN_RETURN_NAMES = ("res", "ans", "result", "output", "final")
+MAX_TRACKED_SUBARRAYS = 12
+
 
 def extract_linked_list_state(f_locals: dict[str, Any]) -> Optional[dict[str, Any]]:
     """Extract serializable linked list structure, pointer variables, and cycle state from frame locals."""
@@ -594,6 +598,51 @@ def extract_auxiliary_state(f_locals: dict[str, Any]) -> Optional[dict[str, Any]
     return state
 
 
+def _serialize_trace_value(value: Any) -> Any:
+    """Convert a runtime value into a JSON-safe snapshot for event metadata."""
+    if value is None or isinstance(value, (int, float, str, bool)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_serialize_trace_value(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        try:
+            items = sorted(value, key=lambda item: (type(item).__name__, repr(item)))
+        except TypeError:  # pragma: no cover - fallback for exotic members
+            items = list(value)
+        return [_serialize_trace_value(item) for item in items]
+    if isinstance(value, dict):
+        return {
+            str(key): _serialize_trace_value(item)
+            for key, item in value.items()
+        }
+    if hasattr(value, "to_list") and callable(value.to_list):
+        try:
+            return _serialize_trace_value(value.to_list())
+        except Exception:  # pragma: no cover - defensive node serialization
+            pass
+    if hasattr(value, "to_level_order") and callable(value.to_level_order):
+        try:
+            return _serialize_trace_value(value.to_level_order())
+        except Exception:  # pragma: no cover - defensive node serialization
+            pass
+    return str(value)
+
+
+def _format_slice_label(
+    name: Optional[str],
+    lower: Any,
+    upper: Any,
+    step: Any,
+) -> str:
+    """Format a Python slice expression for display in sub-array snapshots."""
+    base = name or "slice"
+    lower_text = "" if lower is None else str(lower)
+    upper_text = "" if upper is None else str(upper)
+    if step is None:
+        return f"{base}[{lower_text}:{upper_text}]"
+    return f"{base}[{lower_text}:{upper_text}:{step}]"
+
+
 def evaluate_comparison(left_val: Any, right_val: Any, op_str: str) -> bool:
     """Evaluate comparison operator between two values."""
     if op_str == "<":
@@ -636,6 +685,11 @@ class ExecutionTracer:
         self.current_tree_state: Optional[dict[str, Any]] = None
         self.current_graph_state: Optional[dict[str, Any]] = None
         self.current_aux_state: Optional[dict[str, Any]] = None
+        self.current_recursion_state: Optional[dict[str, Any]] = None
+        self._frame_records: dict[int, dict[str, Any]] = {}
+        self._subarrays: list[dict[str, Any]] = []
+        self.last_return: Optional[dict[str, Any]] = None
+        self.return_structure: Any = None
 
     def bind_array(self, target_array: list[int]) -> None:
         """Bind the active mutable array passed into the user function."""
@@ -649,9 +703,9 @@ class ExecutionTracer:
         """Return metadata for the structures currently being visualized.
 
         Every recorded event carries these snapshots so the UI can keep showing
-        a linked list, tree, graph, or auxiliary container instead of falling
-        back to the array view on events that do not touch array elements
-        (e.g. reads and writes).
+        a linked list, tree, graph, auxiliary container, or recursion snapshot
+        instead of falling back to the array view on events that do not touch
+        array elements (e.g. reads and writes).
         """
         metadata: dict[str, Any] = {}
         if self.current_ll_state is not None:
@@ -662,6 +716,8 @@ class ExecutionTracer:
             metadata["graph"] = self.current_graph_state
         if self.current_aux_state is not None:
             metadata["auxiliary"] = self.current_aux_state
+        if self.current_recursion_state is not None:
+            metadata["recursion"] = self.current_recursion_state
         return metadata
 
     def _add_event(
@@ -729,6 +785,272 @@ class ExecutionTracer:
             if aux_state is not None:
                 self.current_aux_state = aux_state
 
+    def _extract_structure_states(self, frame: types.FrameType) -> None:
+        """Refresh all visualizeable structures from a user frame."""
+        ll_state = extract_linked_list_state(frame.f_locals)
+        if ll_state is not None:
+            self.current_ll_state = ll_state
+        tree_state = extract_tree_state(frame.f_locals)
+        if tree_state is not None:
+            self.current_tree_state = tree_state
+        graph_state = extract_graph_state(frame.f_locals)
+        if graph_state is not None:
+            self.current_graph_state = graph_state
+        aux_state = extract_auxiliary_state(frame.f_locals)
+        if aux_state is not None:
+            self.current_aux_state = aux_state
+
+    def _extract_frame_args(self, frame: types.FrameType) -> dict[str, Any]:
+        """Capture JSON-safe function arguments at call time."""
+        return {
+            name: _serialize_trace_value(value)
+            for name, value in frame.f_locals.items()
+            if name != "self"
+        }
+
+    @staticmethod
+    def _extract_chosen(frame: types.FrameType) -> dict[str, Any]:
+        """Capture conventional result locals such as ``res`` and ``ans``."""
+        return {
+            name: _serialize_trace_value(frame.f_locals[name])
+            for name in CHOSEN_RETURN_NAMES
+            if name in frame.f_locals
+        }
+
+    def _record_subarray(
+        self,
+        name: Optional[str],
+        items: list[Any],
+        source: str,
+        line: Optional[int],
+        depth: int,
+        start: Any = None,
+        stop: Any = None,
+        step: Any = None,
+        label: Optional[str] = None,
+    ) -> None:
+        """Append one intermediate sub-array snapshot for visualization."""
+        snapshot = {
+            "name": name or "slice",
+            "label": label or _format_slice_label(name, start, stop, step),
+            "items": _serialize_trace_value(list(items)),
+            "size": len(items),
+            "start": start,
+            "stop": stop,
+            "step": step,
+            "source": source,
+            "depth": depth,
+            "line": line,
+        }
+        if self._subarrays and self._subarrays[-1] == snapshot:
+            return
+
+        self._subarrays.append(snapshot)
+        if len(self._subarrays) > MAX_TRACKED_SUBARRAYS:
+            self._subarrays = self._subarrays[-MAX_TRACKED_SUBARRAYS:]
+
+    def _record_argument_subarrays(
+        self,
+        frame: types.FrameType,
+        depth: int,
+    ) -> None:
+        """Record non-empty list arguments passed into recursive frames."""
+        if depth <= 0:
+            return
+
+        for name, value in frame.f_locals.items():
+            if name == "self" or not isinstance(value, list) or not value:
+                continue
+            if value is self.tracked_array:
+                continue
+            self._record_subarray(
+                name,
+                value,
+                source="argument",
+                line=frame.f_lineno,
+                depth=depth,
+                label=f"{name} (arg)",
+            )
+
+    def _build_recursion_state(self) -> Optional[dict[str, Any]]:
+        """Build the current call-stack and sub-work snapshot."""
+        frames: list[dict[str, Any]] = []
+        for record in sorted(
+            self._frame_records.values(),
+            key=lambda item: item["depth"],
+        ):
+            frame_copy = dict(record)
+            frame_copy["args"] = dict(record.get("args", {}))
+            frame_copy["chosen"] = dict(record.get("chosen", {}))
+            frames.append(frame_copy)
+
+        subarrays = [dict(subarray) for subarray in self._subarrays]
+        if (
+            not frames
+            and not subarrays
+            and self.return_structure is None
+            and self.last_return is None
+        ):
+            return None
+
+        active = frames[-1] if frames else None
+        return {
+            "frames": frames,
+            "active_function": active["function"] if active else None,
+            "active_depth": active["depth"] if active else None,
+            "max_depth": max((frame["depth"] for frame in frames), default=None),
+            "subarrays": subarrays,
+            "return_structure": self.return_structure,
+            "last_return": (
+                dict(self.last_return) if self.last_return is not None else None
+            ),
+        }
+
+    def _update_recursion_line(
+        self,
+        frame: types.FrameType,
+        lineno: int,
+    ) -> None:
+        """Update the active frame line and refresh the recursion snapshot."""
+        record = self._frame_records.get(id(frame))
+        if record is None:
+            record = {
+                "function": frame.f_code.co_name,
+                "depth": len(self._frame_records),
+                "args": self._extract_frame_args(frame),
+                "line": lineno,
+                "returning": False,
+                "return_value": None,
+                "chosen": {},
+            }
+            self._frame_records[id(frame)] = record
+        record["line"] = lineno
+        self.current_recursion_state = self._build_recursion_state()
+
+    def trace_call(self, frame: types.FrameType) -> ExecutionEvent:
+        """Record a user-function call and push it onto the visual call stack."""
+        depth = len(self._frame_records)
+        args = self._extract_frame_args(frame)
+        record = {
+            "function": frame.f_code.co_name,
+            "depth": depth,
+            "args": args,
+            "line": frame.f_lineno,
+            "returning": False,
+            "return_value": None,
+            "chosen": {},
+        }
+        self._frame_records[id(frame)] = record
+        self._extract_structure_states(frame)
+        self._record_argument_subarrays(frame, depth)
+        self.current_recursion_state = self._build_recursion_state()
+
+        return self._add_event(
+            event_type=EventType.CALL,
+            line_number=frame.f_lineno,
+            array_state=self.get_array_snapshot(),
+            metadata={
+                "call": {
+                    "function": record["function"],
+                    "depth": depth,
+                    "args": args,
+                    "line": frame.f_lineno,
+                }
+            },
+        )
+
+    def trace_return(
+        self,
+        frame: types.FrameType,
+        value: Any,
+    ) -> ExecutionEvent:
+        """Record a user-function return and pop it from the visual call stack."""
+        record = self._frame_records.get(id(frame))
+        if record is None:
+            record = {
+                "function": frame.f_code.co_name,
+                "depth": 0,
+                "args": self._extract_frame_args(frame),
+                "line": frame.f_lineno,
+                "returning": False,
+                "return_value": None,
+                "chosen": {},
+            }
+            self._frame_records[id(frame)] = record
+
+        serialized_value = _serialize_trace_value(value)
+        record["line"] = frame.f_lineno
+        record["returning"] = True
+        record["return_value"] = serialized_value
+        record["chosen"] = self._extract_chosen(frame)
+
+        depth = record["depth"]
+        self.last_return = {
+            "function": record["function"],
+            "value": serialized_value,
+            "depth": depth,
+        }
+        if depth == 0:
+            self.return_structure = serialized_value
+
+        self._extract_structure_states(frame)
+        self.current_recursion_state = self._build_recursion_state()
+
+        event = self._add_event(
+            event_type=EventType.RETURN,
+            line_number=frame.f_lineno,
+            array_state=self.get_array_snapshot(),
+            values=[serialized_value],
+            metadata={
+                "return": {
+                    "function": record["function"],
+                    "value": serialized_value,
+                    "depth": depth,
+                    "chosen": dict(record["chosen"]),
+                }
+            },
+        )
+
+        self._frame_records.pop(id(frame), None)
+        self.current_recursion_state = self._build_recursion_state()
+        return event
+
+    def trace_slice(
+        self,
+        value: Any,
+        lower: Any,
+        upper: Any,
+        step: Any,
+        name: Optional[str],
+        lineno: Optional[int] = None,
+    ) -> Any:
+        """Perform a slice and record list sub-arrays created by the operation."""
+        result = value[slice(lower, upper, step)]
+        if not isinstance(result, list):
+            return result
+
+        frame = self._caller_frame()
+        line = lineno if lineno is not None else self.current_line
+        if frame is not None:
+            record = self._frame_records.get(id(frame))
+            depth = record["depth"] if record is not None else 0
+        else:
+            depth = 0
+
+        self._record_subarray(
+            name,
+            result,
+            source="slice",
+            line=line,
+            depth=depth,
+            start=lower,
+            stop=upper,
+            step=step,
+            label=_format_slice_label(name, lower, upper, step),
+        )
+        self.current_recursion_state = self._build_recursion_state()
+        return result
+
     def trace_line(
         self,
         lineno: int,
@@ -737,18 +1059,8 @@ class ExecutionTracer:
         """Record line-level execution."""
         self.current_line = lineno
         if frame is not None:
-            ll_state = extract_linked_list_state(frame.f_locals)
-            if ll_state is not None:
-                self.current_ll_state = ll_state
-            tree_state = extract_tree_state(frame.f_locals)
-            if tree_state is not None:
-                self.current_tree_state = tree_state
-            graph_state = extract_graph_state(frame.f_locals)
-            if graph_state is not None:
-                self.current_graph_state = graph_state
-            aux_state = extract_auxiliary_state(frame.f_locals)
-            if aux_state is not None:
-                self.current_aux_state = aux_state
+            self._extract_structure_states(frame)
+            self._update_recursion_line(frame, lineno)
 
         return self._add_event(
             event_type=EventType.LINE,
@@ -1030,10 +1342,12 @@ class ExecutionTracer:
     def _trace_dispatch(self, frame: types.FrameType, event: str, arg: Any) -> Any:
         """Trace dispatch function invoked by sys.settrace."""
         if frame.f_code.co_filename == self.target_filename:
-            if event == "line":
+            if event == "call":
+                self.trace_call(frame)
+            elif event == "line":
                 self.trace_line(frame.f_lineno, frame=frame)
             elif event == "return":
-                self.trace_line(frame.f_lineno, frame=frame)
+                self.trace_return(frame, arg)
         return self._trace_dispatch
 
     def install(self) -> None:

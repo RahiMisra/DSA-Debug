@@ -17,6 +17,7 @@ from src.visualization.event_processor import EventProcessor
 from src.visualization.graph_canvas import GraphCanvas
 from src.visualization.hash_canvas import AuxiliaryHashCanvas
 from src.visualization.linked_list_canvas import LinkedListCanvas
+from src.visualization.recursion_canvas import RecursionCanvas
 from src.visualization.tree_canvas import BinaryTreeCanvas
 
 
@@ -132,6 +133,7 @@ class MainWindow:
         self.graph_view = GraphCanvas(viz_container)
         self.auxiliary_view = AuxiliaryLinearCanvas(viz_container)
         self.hash_view = AuxiliaryHashCanvas(viz_container)
+        self.recursion_view = RecursionCanvas(viz_container)
 
         center_frame.add(viz_container, minsize=400)
 
@@ -381,6 +383,7 @@ def stack_and_queue(nums):
             view.pack_forget()
         self.auxiliary_view.pack_forget()
         self.hash_view.pack_forget()
+        self.recursion_view.pack_forget()
 
         auxiliary_state = event.metadata.get("auxiliary") if event is not None else None
         if auxiliary_state and (
@@ -407,6 +410,19 @@ def stack_and_queue(nums):
                 pady=(0, 4),
             )
 
+        recursion_state = (
+            event.metadata.get("recursion") if event is not None else None
+        )
+        if self._has_recursion_activity(recursion_state):
+            self.recursion_view.render_event(event)
+            self.recursion_view.pack(
+                side=tk.BOTTOM,
+                fill=tk.X,
+                expand=False,
+                padx=6,
+                pady=(0, 4),
+            )
+
         views[kind].pack(fill=tk.BOTH, expand=True)
         self.lbl_viz.config(text=labels.get(kind, labels["array"]))
 
@@ -417,6 +433,19 @@ def stack_and_queue(nums):
                 self.array_view.set_array_state(EventProcessor.process_event(event))
         elif event is not None:
             views[kind].render_event(event)
+
+    @staticmethod
+    def _has_recursion_activity(state: Optional[dict]) -> bool:
+        """Return True when call-stack, sub-work, or return data is worth showing."""
+        if not state:
+            return False
+        frames = state.get("frames") or []
+        return bool(
+            len(frames) > 1
+            or state.get("subarrays")
+            or state.get("last_return") is not None
+            or state.get("return_structure") is not None
+        )
 
     def _format_event_description(self, event: ExecutionEvent) -> str:
         """Generate human-readable description for an execution event."""
@@ -484,6 +513,24 @@ def stack_and_queue(nums):
 
             value_str = "" if value is None else f" {value}"
             return f"{line_prefix}{name} {action}{value_str}"
+
+        elif event.event_type == EventType.CALL:
+            call = event.metadata.get("call", {})
+            function = call.get("function", "?")
+            depth = call.get("depth", 0)
+            args_text = ", ".join(
+                f"{key}={value}" for key, value in call.get("args", {}).items()
+            )
+            signature = f"({args_text})" if args_text else "()"
+            return f"{line_prefix}Called {function}{signature} at depth {depth}"
+
+        elif event.event_type == EventType.RETURN:
+            returned = event.metadata.get("return", {})
+            function = returned.get("function", "?")
+            depth = returned.get("depth", 0)
+            value = returned.get("value")
+            value_text = "None" if value is None else str(value)
+            return f"{line_prefix}Returned {function} -> {value_text} (depth {depth})"
 
         elif event.event_type == EventType.LINE:
             return f"{line_prefix}Executed line {event.line_number}"
