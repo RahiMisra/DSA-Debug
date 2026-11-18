@@ -39,6 +39,7 @@ GRAPH_VAR_NAMES = (
     "prerequisites",
     "prereqs",
     "dependencies",
+    "grid",
 )
 
 GRAPH_ACTIVE_VAR_NAMES = ("curr", "current", "node", "start", "u", "v")
@@ -72,6 +73,9 @@ AUX_MAP_NAME_TOKENS = {
     "map",
     "mapping",
     "histogram",
+    "groups",
+    "group",
+    "anagrams",
 }
 AUX_SET_NAME_TOKENS = {"visited", "seen", "unique"}
 
@@ -270,6 +274,72 @@ def _label_in(value: Any, labels: set[Any]) -> Optional[Any]:
         return None
 
 
+def _is_neighbor_node(value: Any) -> bool:
+    """Return True for LeetCode-style object nodes with ``val`` and ``neighbors``."""
+    if not hasattr(value, "val") or not hasattr(value, "neighbors"):
+        return False
+    neighbors = getattr(value, "neighbors")
+    return neighbors is None or isinstance(neighbors, (list, tuple, set, frozenset))
+
+
+def _collect_neighbor_nodes(start: Any) -> list[Any]:
+    """Collect a user object graph reachable through ``neighbors`` links."""
+    nodes: list[Any] = []
+    seen: set[int] = set()
+    queue: deque[Any] = deque([start])
+
+    while queue:
+        curr = queue.popleft()
+        if id(curr) in seen or not _is_neighbor_node(curr):
+            continue
+        seen.add(id(curr))
+        nodes.append(curr)
+        for neighbor in getattr(curr, "neighbors", None) or []:
+            if id(neighbor) not in seen:
+                queue.append(neighbor)
+
+    return nodes
+
+
+def _node_graph_to_adjacency(start: Any) -> list[list[int]]:
+    """Convert a cloned object graph back into a sorted adjacency list."""
+    nodes = _collect_neighbor_nodes(start)
+    if not nodes:
+        return []
+
+    try:
+        nodes = sorted(nodes, key=lambda node: getattr(node, "val", 0))
+    except TypeError:  # pragma: no cover - mixed label types
+        pass
+
+    index = {id(node): position + 1 for position, node in enumerate(nodes)}
+    return [
+        [
+            index[id(neighbor)]
+            for neighbor in getattr(node, "neighbors", None) or []
+            if id(neighbor) in index
+        ]
+        for node in nodes
+    ]
+
+
+def _graph_from_node_object(value: Any) -> Optional[Graph]:
+    """Build an undirected graph from a user-defined ``Node.neighbors`` object."""
+    nodes = _collect_neighbor_nodes(value)
+    if not nodes:
+        return None
+
+    adjacency: dict[Any, list[Any]] = {
+        getattr(node, "val", id(node)): [] for node in nodes
+    }
+    for node in nodes:
+        source = getattr(node, "val", id(node))
+        for neighbor in getattr(node, "neighbors", None) or []:
+            adjacency[source].append(getattr(neighbor, "val", id(neighbor)))
+
+    return Graph(adjacency, directed=False)
+
+
 def _find_graph(f_locals: dict[str, Any]) -> Optional[Graph]:
     """Locate the primary graph-shaped local variable in a frame."""
     for name in GRAPH_VAR_NAMES:
@@ -286,12 +356,18 @@ def _find_graph(f_locals: dict[str, Any]) -> Optional[Graph]:
         if isinstance(value, Graph) and value.nodes:
             return value
 
+    # User-defined LeetCode object graphs (for example Clone Graph nodes).
+    for value in f_locals.values():
+        graph = _graph_from_node_object(value)
+        if graph is not None and graph.nodes:
+            return graph
+
     # Fall back to any collection whose variable name suggests a graph.
     for name, value in f_locals.items():
         lower_name = name.lower()
         if not any(
             token in lower_name
-            for token in ("graph", "adj", "edge", "network", "connection")
+            for token in ("graph", "adj", "edge", "network", "connection", "grid")
         ):
             continue
         try:
@@ -302,6 +378,7 @@ def _find_graph(f_locals: dict[str, Any]) -> Optional[Graph]:
             return graph
 
     return None
+
 
 
 def _collect_vertex_labels(
@@ -458,9 +535,21 @@ def classify_auxiliary_container(name: str, value: Any) -> Optional[str]:
     if not base:
         return None
 
-    if base in AUX_QUEUE_NAMES or base.endswith("queue") or base.endswith("_q"):
+    tokens = _auxiliary_name_tokens(name)
+
+    if (
+        base in AUX_QUEUE_NAMES
+        or base.endswith("queue")
+        or base.endswith("_q")
+        or "queue" in tokens
+    ):
         return "queue"
-    if base in AUX_STACK_NAMES or base.endswith("stack") or base.endswith("_st"):
+    if (
+        base in AUX_STACK_NAMES
+        or base.endswith("stack")
+        or base.endswith("_st")
+        or "stack" in tokens
+    ):
         return "stack"
     if is_deque:
         return "queue"
@@ -625,7 +714,25 @@ def _serialize_trace_value(value: Any) -> Any:
             return _serialize_trace_value(value.to_level_order())
         except Exception:  # pragma: no cover - defensive node serialization
             pass
+    if _is_neighbor_node(value):
+        try:
+            return _node_graph_to_adjacency(value)
+        except Exception:  # pragma: no cover - defensive node serialization
+            pass
     return str(value)
+
+
+def _frame_scope(frame: types.FrameType) -> dict[str, Any]:
+    """Return a frame's locals plus ``self`` attributes for structure extraction."""
+    scope = dict(frame.f_locals)
+    owner = scope.get("self")
+    if owner is not None and hasattr(owner, "__dict__"):
+        try:
+            for name, value in vars(owner).items():
+                scope.setdefault(name, value)
+        except TypeError:  # pragma: no cover - defensive for exotic objects
+            pass
+    return scope
 
 
 def _format_slice_label(
@@ -761,19 +868,19 @@ class ExecutionTracer:
         cost.
         """
         if self.current_ll_state is not None:
-            ll_state = extract_linked_list_state(frame.f_locals)
+            ll_state = extract_linked_list_state(_frame_scope(frame))
             if ll_state is not None:
                 self.current_ll_state = ll_state
         if self.current_tree_state is not None:
-            tree_state = extract_tree_state(frame.f_locals)
+            tree_state = extract_tree_state(_frame_scope(frame))
             if tree_state is not None:
                 self.current_tree_state = tree_state
         if self.current_graph_state is not None:
-            graph_state = extract_graph_state(frame.f_locals)
+            graph_state = extract_graph_state(_frame_scope(frame))
             if graph_state is not None:
                 self.current_graph_state = graph_state
         if self.current_aux_state is not None:
-            aux_state = extract_auxiliary_state(frame.f_locals)
+            aux_state = extract_auxiliary_state(_frame_scope(frame))
             if aux_state is not None:
                 self.current_aux_state = aux_state
 
@@ -781,22 +888,23 @@ class ExecutionTracer:
         """Refresh tracked structures, including first-time auxiliary state."""
         self._refresh_structure_states(frame)
         if self.current_aux_state is None:
-            aux_state = extract_auxiliary_state(frame.f_locals)
+            aux_state = extract_auxiliary_state(_frame_scope(frame))
             if aux_state is not None:
                 self.current_aux_state = aux_state
 
     def _extract_structure_states(self, frame: types.FrameType) -> None:
         """Refresh all visualizeable structures from a user frame."""
-        ll_state = extract_linked_list_state(frame.f_locals)
+        scope = _frame_scope(frame)
+        ll_state = extract_linked_list_state(scope)
         if ll_state is not None:
             self.current_ll_state = ll_state
-        tree_state = extract_tree_state(frame.f_locals)
+        tree_state = extract_tree_state(scope)
         if tree_state is not None:
             self.current_tree_state = tree_state
-        graph_state = extract_graph_state(frame.f_locals)
+        graph_state = extract_graph_state(scope)
         if graph_state is not None:
             self.current_graph_state = graph_state
-        aux_state = extract_auxiliary_state(frame.f_locals)
+        aux_state = extract_auxiliary_state(scope)
         if aux_state is not None:
             self.current_aux_state = aux_state
 

@@ -160,6 +160,17 @@ def test_extract_graph_state_none_without_graph() -> None:
     assert extract_graph_state({"nums": [3, 1, 2], "x": 5}) is None
 
 
+def test_extract_graph_state_ignores_linked_list_and_tree_nodes() -> None:
+    """Verify standard ListNode/TreeNode values are not treated as object graphs."""
+    from src.execution.models import ListNode, TreeNode
+
+    assert extract_graph_state({"head": ListNode.from_list([1, 2, 3])}) is None
+    assert (
+        extract_graph_state({"root": TreeNode.from_level_order([1, 2, 3])})
+        is None
+    )
+
+
 def test_extract_graph_state_from_matrix() -> None:
     """Verify a raw adjacency-matrix argument produces an unvisited graph state."""
     state = extract_graph_state(

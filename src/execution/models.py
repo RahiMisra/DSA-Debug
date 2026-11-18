@@ -25,6 +25,13 @@ GRAPH_DIRECTED_VAR_NAMES = {
     "directed_edges",
 }
 
+# Grid-shaped graph inputs (for example LeetCode Number of Islands).
+GRID_VAR_NAMES = {"grid", "island_grid", "islandgrid"}
+
+# Cell values that represent water / absent vertices in grid graphs.
+GRID_WATER_VALUES = {None, 0, False, "", "0", "."}
+
+
 
 def _is_node_label(value: Any) -> bool:
     """Return True for primitive, hashable graph vertex labels."""
@@ -309,6 +316,45 @@ class Graph:
         return cls(raw, directed=directed)
 
     @classmethod
+    def from_grid(cls, grid: Iterable[Iterable[Any]]) -> Graph:
+        """Build an undirected graph from a rectangular grid of land/water cells.
+
+        Every non-water cell becomes a vertex labeled ``row * width + column``
+        and connects to its four orthogonally adjacent land cells. This keeps
+        grid-based problems such as Number of Islands visible in the graph
+        viewport without changing the user's grid input.
+        """
+        rows = [list(row) for row in grid]
+        height = len(rows)
+        width = len(rows[0]) if rows else 0
+
+        adjacency: dict[int, list[int]] = {}
+        for r in range(height):
+            for c in range(width):
+                try:
+                    is_water = rows[r][c] in GRID_WATER_VALUES
+                except TypeError:  # unhashable cell values are treated as land
+                    is_water = False
+                if is_water:
+                    continue
+                adjacency[r * width + c] = []
+
+        for r in range(height):
+            for c in range(width):
+                label = r * width + c
+                if label not in adjacency:
+                    continue
+                for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < height and 0 <= nc < width:
+                        neighbor = nr * width + nc
+                        if neighbor in adjacency:
+                            adjacency[label].append(neighbor)
+
+        return cls(adjacency, directed=False)
+
+
+    @classmethod
     def from_value(cls, value: Any, name: Optional[str] = None) -> Optional[Graph]:
         """Convert a graph-shaped value into a Graph, or return None if unrecognized.
 
@@ -328,6 +374,9 @@ class Graph:
 
         if not isinstance(value, (list, tuple)) or not value:
             return None
+
+        if lower_name in GRID_VAR_NAMES and cls._looks_like_grid(value):
+            return cls.from_grid(value)
 
         if lower_name in GRAPH_EDGE_VAR_NAMES and cls._looks_like_edge_list(value):
             return cls.from_edge_list(
@@ -360,6 +409,21 @@ class Graph:
             isinstance(entry, (int, float, bool))
             for row in rows
             for entry in row
+        )
+
+    @staticmethod
+    def _looks_like_grid(value: Iterable[Any]) -> bool:
+        """Return True for a rectangular grid of primitive cell values."""
+        rows = list(value)
+        if not rows or not all(isinstance(row, (list, tuple)) for row in rows):
+            return False
+        width = len(rows[0])
+        if width == 0 or any(len(row) != width for row in rows):
+            return False
+        return all(
+            not isinstance(cell, (list, tuple, dict, set, frozenset))
+            for row in rows
+            for cell in row
         )
 
     @staticmethod

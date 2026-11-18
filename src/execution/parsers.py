@@ -83,7 +83,25 @@ def parse_leetcode_inputs(raw_text: str) -> dict[str, Any]:
 
             # Smart conversion based on parameter name
             var_lower = var_name.lower()
-            if var_lower in ("head", "list", "node") and isinstance(evaluated_val, (list, tuple)):
+            nested_rows = isinstance(evaluated_val, (list, tuple)) and any(
+                isinstance(item, (list, tuple)) for item in evaluated_val
+            )
+            if (
+                var_lower
+                in (
+                    "head",
+                    "list",
+                    "node",
+                    "l1",
+                    "l2",
+                    "list1",
+                    "list2",
+                    "heada",
+                    "headb",
+                )
+                and isinstance(evaluated_val, (list, tuple))
+                and not (var_lower == "node" and nested_rows)
+            ):
                 results[var_name] = ListNode.from_list(list(evaluated_val))
             elif var_lower in ("root", "tree") and isinstance(evaluated_val, (list, tuple)):
                 results[var_name] = TreeNode.from_level_order(list(evaluated_val))

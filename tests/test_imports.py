@@ -33,6 +33,7 @@ import pytest
         "src.visualization.auxiliary_canvas",
         "src.visualization.hash_canvas",
         "src.visualization.recursion_canvas",
+        "src.visualization.dashboard",
     ],
 )
 def test_module_imports(module_name: str) -> None:

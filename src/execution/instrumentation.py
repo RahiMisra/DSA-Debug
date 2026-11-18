@@ -23,6 +23,19 @@ COMPARE_OPS: dict[type[ast.cmpop], str] = {
 }
 
 
+def _receiver_name(node: ast.AST) -> Optional[str]:
+    """Return a display name for a local or ``self.attribute`` receiver."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+    ):
+        return node.attr
+    return None
+
+
 class TraceInstrumenter(ast.NodeTransformer):
     """AST NodeTransformer that instruments Python code for execution tracing.
 
@@ -76,9 +89,7 @@ class TraceInstrumenter(ast.NodeTransformer):
         ):
             target = node.targets[0]
             val_expr = self.visit(node.value)
-            container_name = (
-                target.value.id if isinstance(target.value, ast.Name) else None
-            )
+            container_name = _receiver_name(target.value)
             write_call = ast.Call(
                 func=ast.Name(id="__trace_write__", ctx=ast.Load()),
                 args=[
@@ -105,9 +116,7 @@ class TraceInstrumenter(ast.NodeTransformer):
                 op=node.op,
                 right=val_expr,
             )
-            container_name = (
-                target.value.id if isinstance(target.value, ast.Name) else None
-            )
+            container_name = _receiver_name(target.value)
             write_call = ast.Call(
                 func=ast.Name(id="__trace_write__", ctx=ast.Load()),
                 args=[
@@ -125,11 +134,12 @@ class TraceInstrumenter(ast.NodeTransformer):
         return self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> ast.AST:
-        """Instrument stack/queue mutations on simple local variable receivers."""
+        """Instrument container mutations on local or ``self.attribute`` receivers."""
         func = node.func
+        receiver = _receiver_name(func.value) if isinstance(func, ast.Attribute) else None
         if (
             isinstance(func, ast.Attribute)
-            and isinstance(func.value, ast.Name)
+            and receiver is not None
             and func.attr in CONTAINER_METHODS
             and not node.keywords
             and not any(isinstance(arg, ast.Starred) for arg in node.args)
@@ -140,7 +150,7 @@ class TraceInstrumenter(ast.NodeTransformer):
                 func=ast.Name(id="__trace_container_call__", ctx=ast.Load()),
                 args=[
                     func.value,
-                    ast.Constant(value=func.value.id),
+                    ast.Constant(value=receiver),
                     ast.Constant(value=func.attr),
                     args_tuple,
                     ast.Constant(value=node.lineno),
@@ -201,9 +211,7 @@ class TraceInstrumenter(ast.NodeTransformer):
         """Instrument array reads and slice creation in Load context."""
         if isinstance(node.ctx, ast.Load) and isinstance(node.slice, ast.Slice):
             part = node.slice
-            container_name = (
-                node.value.id if isinstance(node.value, ast.Name) else None
-            )
+            container_name = _receiver_name(node.value)
             lower = self.visit(part.lower) if part.lower is not None else ast.Constant(value=None)
             upper = self.visit(part.upper) if part.upper is not None else ast.Constant(value=None)
             step = self.visit(part.step) if part.step is not None else ast.Constant(value=None)
@@ -227,9 +235,7 @@ class TraceInstrumenter(ast.NodeTransformer):
             and not isinstance(node.slice, ast.Slice)
         ):
             # Transform to __trace_read__(arr, idx, lineno, container_name)
-            container_name = (
-                node.value.id if isinstance(node.value, ast.Name) else None
-            )
+            container_name = _receiver_name(node.value)
             read_call = ast.Call(
                 func=ast.Name(id="__trace_read__", ctx=ast.Load()),
                 args=[

@@ -129,6 +129,16 @@ def test_parse_malformed_input_raises_error() -> None:
         parse_leetcode_inputs("head = [1, 2, unclosed")
 
 
+def test_nested_node_input_is_preserved_for_object_graphs() -> None:
+    """Verify nested node input stays a list while flat node input becomes a list node."""
+    nested = parse_leetcode_inputs("node = [[2, 4], [1, 3]]")
+    assert nested["node"] == [[2, 4], [1, 3]]
+
+    flat = parse_leetcode_inputs("node = [1, 2, 3]")
+    assert isinstance(flat["node"], ListNode)
+    assert flat["node"].to_list() == [1, 2, 3]
+
+
 # 4. User Code Execution with Auto-Injected Models
 def test_execution_with_auto_injected_list_node() -> None:
     """Verify user code can use ListNode without manually defining it."""

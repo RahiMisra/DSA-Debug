@@ -13,6 +13,7 @@ from src.ui.code_editor import CodeEditor
 from src.ui.execution_controls import ExecutionControls
 from src.ui.input_panel import InputPanel
 from src.visualization.auxiliary_canvas import AuxiliaryLinearCanvas
+from src.visualization.dashboard import MultiViewDashboard
 from src.visualization.event_processor import EventProcessor
 from src.visualization.graph_canvas import GraphCanvas
 from src.visualization.hash_canvas import AuxiliaryHashCanvas
@@ -125,15 +126,18 @@ class MainWindow:
             anchor="w",
         )
         self.lbl_viz.pack(fill=tk.X)
-        self.array_view = ArrayView(viz_container)
+        self.dashboard = MultiViewDashboard(viz_container)
+        self.dashboard.pack(fill=tk.BOTH, expand=True)
+
+        self.array_view = ArrayView(self.dashboard.primary)
         self.array_view.pack(fill=tk.BOTH, expand=True)
 
-        self.linked_list_view = LinkedListCanvas(viz_container)
-        self.tree_view = BinaryTreeCanvas(viz_container)
-        self.graph_view = GraphCanvas(viz_container)
-        self.auxiliary_view = AuxiliaryLinearCanvas(viz_container)
-        self.hash_view = AuxiliaryHashCanvas(viz_container)
-        self.recursion_view = RecursionCanvas(viz_container)
+        self.linked_list_view = LinkedListCanvas(self.dashboard.primary)
+        self.tree_view = BinaryTreeCanvas(self.dashboard.primary)
+        self.graph_view = GraphCanvas(self.dashboard.primary)
+        self.auxiliary_view = AuxiliaryLinearCanvas(self.dashboard.auxiliary)
+        self.hash_view = AuxiliaryHashCanvas(self.dashboard.auxiliary)
+        self.recursion_view = RecursionCanvas(self.dashboard.subwork)
 
         center_frame.add(viz_container, minsize=400)
 
@@ -386,42 +390,34 @@ def stack_and_queue(nums):
         self.recursion_view.pack_forget()
 
         auxiliary_state = event.metadata.get("auxiliary") if event is not None else None
-        if auxiliary_state and (
-            auxiliary_state.get("stacks") or auxiliary_state.get("queues")
-        ):
+        show_linear = bool(
+            auxiliary_state
+            and (auxiliary_state.get("stacks") or auxiliary_state.get("queues"))
+        )
+        if show_linear:
             self.auxiliary_view.render_event(event)
-            self.auxiliary_view.pack(
-                side=tk.BOTTOM,
-                fill=tk.X,
-                expand=False,
-                padx=6,
-                pady=(0, 4),
-            )
+            self.auxiliary_view.pack(fill=tk.BOTH, expand=True)
 
-        if auxiliary_state and (
-            auxiliary_state.get("maps") or auxiliary_state.get("sets")
-        ):
+        show_hash = bool(
+            auxiliary_state
+            and (auxiliary_state.get("maps") or auxiliary_state.get("sets"))
+        )
+        if show_hash:
             self.hash_view.render_event(event)
-            self.hash_view.pack(
-                side=tk.BOTTOM,
-                fill=tk.X,
-                expand=False,
-                padx=6,
-                pady=(0, 4),
-            )
+            self.hash_view.pack(fill=tk.BOTH, expand=True)
 
         recursion_state = (
             event.metadata.get("recursion") if event is not None else None
         )
-        if self._has_recursion_activity(recursion_state):
+        show_subwork = self._has_recursion_activity(recursion_state)
+        if show_subwork:
             self.recursion_view.render_event(event)
-            self.recursion_view.pack(
-                side=tk.BOTTOM,
-                fill=tk.X,
-                expand=False,
-                padx=6,
-                pady=(0, 4),
-            )
+            self.recursion_view.pack(fill=tk.BOTH, expand=True)
+
+        self.dashboard.set_workspace_visible(
+            auxiliary=show_linear or show_hash,
+            subwork=show_subwork,
+        )
 
         views[kind].pack(fill=tk.BOTH, expand=True)
         self.lbl_viz.config(text=labels.get(kind, labels["array"]))
