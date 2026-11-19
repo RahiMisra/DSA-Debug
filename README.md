@@ -29,7 +29,7 @@ Rather than relying on predefined animations, Trace executes user-submitted Pyth
   - **Step Forward / Step Back:** Step through recorded execution event by event.
   - **Auto Play / Pause:** Continuous playback with adjustable speed slider.
   - **Reset:** Return instantly to the initial array state.
-- **Input Presets:** Quick buttons to test Random, Reverse-sorted, Sorted, Duplicate, and Negative arrays.
+- **Runnable Preset Library:** One-click LeetCode examples for Array, String, Linked List, Binary Tree, Graph, Stack/Queue, and Hash Map/Set, each loading a matching input and default algorithm. The Array preset generates a fresh random array on every click.
 
 ---
 
@@ -85,6 +85,7 @@ src/
 │   ├── main_window.py          # Main desktop window integrating all components
 │   ├── code_editor.py          # Code editor with line numbering and highlighting
 │   ├── input_panel.py          # Array input, presets, and function name selector
+│   ├── presets.py              # Single source of preset inputs and default algorithms
 │   ├── array_view.py           # Tkinter canvas rendering dynamic array bars
 │   └── execution_controls.py   # Step forward/back, play/pause, reset, speed slider
 ├── execution/

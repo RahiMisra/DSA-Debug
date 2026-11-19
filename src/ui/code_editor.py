@@ -6,6 +6,8 @@ import tkinter as tk
 from tkinter import font as tkfont
 from typing import Optional
 
+from src.ui.presets import ARRAY_PRESET
+
 
 class CodeEditor(tk.Frame):
     """Text editor with line numbering and current execution line highlighting."""
@@ -17,13 +19,7 @@ class CodeEditor(tk.Frame):
     HIGHLIGHT_BG = "#45475A"    # Line highlight background
     HIGHLIGHT_FG = "#F5E0DC"    # Line highlight text color
 
-    DEFAULT_CODE = """def bubble_sort(arr):
-    n = len(arr)
-    for i in range(n):
-        for j in range(0, n - i - 1):
-            if arr[j] > arr[j + 1]:
-                arr[j], arr[j + 1] = arr[j + 1], arr[j]
-"""
+    DEFAULT_CODE = ARRAY_PRESET.code
 
     def __init__(self, master: Optional[tk.Widget] = None, **kwargs) -> None:
         super().__init__(master, bg=self.BG_COLOR, **kwargs)

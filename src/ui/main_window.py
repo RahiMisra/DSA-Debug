@@ -12,6 +12,7 @@ from src.ui.array_view import ArrayView
 from src.ui.code_editor import CodeEditor
 from src.ui.execution_controls import ExecutionControls
 from src.ui.input_panel import InputPanel
+from src.ui.presets import get_preset
 from src.visualization.auxiliary_canvas import AuxiliaryLinearCanvas
 from src.visualization.dashboard import MultiViewDashboard
 from src.visualization.event_processor import EventProcessor
@@ -149,83 +150,10 @@ class MainWindow:
             pass
 
     def handle_preset_selected(self, preset_name: str) -> None:
-        """Populate appropriate algorithm template code when a preset is selected."""
-        if preset_name == "Linked List":
-            code = """def traverse_linked_list(head):
-    curr = head
-    while curr is not None:
-        curr = curr.next
-    return head
-"""
-            self.editor.set_code(code)
-        elif preset_name == "Binary Tree":
-            code = """def search_bst(root, target=15):
-    curr = root
-    while curr is not None:
-        if curr.val == target:
-            return curr
-        elif target < curr.val:
-            curr = curr.left
-        else:
-            curr = curr.right
-    return None
-"""
-            self.editor.set_code(code)
-        elif preset_name == "Graph":
-            code = """def count_provinces(isConnected):
-    n = len(isConnected)
-    visited = [False] * n
-    provinces = 0
-    for start in range(n):
-        if not visited[start]:
-            provinces += 1
-            stack = [start]
-            while stack:
-                node = stack.pop()
-                visited[node] = True
-                for neighbor in range(n):
-                    if isConnected[node][neighbor] == 1 and not visited[neighbor]:
-                        stack.append(neighbor)
-    return provinces
-"""
-            self.editor.set_code(code)
-        elif preset_name == "Stack / Queue":
-            code = """from collections import deque
-
-def stack_and_queue(nums):
-    stack = []
-    queue = deque()
-    for n in nums:
-        stack.append(n)
-        queue.append(n)
-    result = []
-    while stack:
-        result.append(stack.pop())
-    while queue:
-        result.append(queue.popleft())
-    return result
-"""
-            self.editor.set_code(code)
-        elif preset_name == "Hash Map / Set":
-            code = """def hash_demo(nums):
-    counts = {}
-    seen = set()
-    for n in nums:
-        counts[n] = counts.get(n, 0) + 1
-        if n not in seen:
-            seen.add(n)
-    return len(counts)
-"""
-            self.editor.set_code(code)
-        elif preset_name in ("Array", "Random Array"):
-            code = """def bubble_sort(arr):
-    n = len(arr)
-    for i in range(n):
-        for j in range(0, n - i - 1):
-            if arr[j] > arr[j + 1]:
-                arr[j], arr[j + 1] = arr[j + 1], arr[j]
-"""
-            self.editor.set_code(code)
+        """Load the selected preset's default algorithm code."""
+        preset = get_preset(preset_name)
+        if preset is not None:
+            self.editor.set_code(preset.code)
 
     def handle_run(self) -> None:
         """Execute user code and initialize execution history for playback."""
