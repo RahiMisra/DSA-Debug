@@ -23,7 +23,9 @@ Rather than relying on predefined animations, Trace executes user-submitted Pyth
 - **Hash Map & Set Panels:** Detects frequency maps, lookup tables, memo tables, and visited sets (`freq`, `count`, `memo`, `dp`, `table`, `visited`, `seen`, …) and renders key/value rows and membership badges with active-key/active-member highlighting.
 - **Recursion & Subwork Panel:** Tracks recursive call frames with depth, arguments, and return values; renders the active call stack deepest-first, intermediate list slices and recursive sub-array arguments, and a dedicated returned-structure panel.
 - **LeetCode `class Solution:` Support:** Auto-detects `Solution` classes, instantiates them, and runs bound methods with `self` handled automatically. Supports multi-parameter inputs such as `head`, `l1`/`l2`, `root`/`p`/`q`, grids, and `adjList` object graphs.
-- **Segmented Multi-View Dashboard:** Primary structure stays in the main viewport while stack/queue, hash map/set, recursion, sub-array, and returned-structure segments appear below when relevant.
+- **Segmented Multi-View Dashboard:** Primary structure stays in the main viewport while stack/queue, hash map/set, recursion, sub-array, and returned-structure segments appear below when relevant. A draggable splitter separates the primary viewport from the workspace, the workspace splits auxiliary and subwork side by side, and every panel has a header with a collapse/expand control. Panel visibility and collapse state persist while stepping.
+- **Scrollable, Zoom-Free Viewports:** Wide arrays, long linked lists, large trees/graphs, deep call stacks, and long stack/queue/hash content render at a readable natural size. Scrollbars appear only when needed, and the view supports mouse-wheel vertical scrolling, Shift+wheel horizontal scrolling, and click-drag background panning.
+- **Click-to-Expand Truncated Text:** Long node labels, pointer lists, hash keys/values, set members, recursion frame labels, sub-array items, and returned structures show an ellipsis. Clicking one opens a read-only detail window with the full wrapped/scrollable value; close it with ✕, Escape, or by clicking elsewhere.
 - **Synchronized Code Editor:** Displays source code with real-time line highlighting indicating the currently executing statement.
 - **Interactive Execution Controls:**
   - **Step Forward / Step Back:** Step through recorded execution event by event.
@@ -106,7 +108,10 @@ src/
     ├── auxiliary_canvas.py     # Stack towers and queue pipes with operation transitions
     ├── hash_canvas.py          # Map key/value tables and set membership badges
     ├── recursion_canvas.py     # Call stack, sub-array rows, and returned structure
-    └── dashboard.py            # Primary + auxiliary + subwork segmented layout
+    ├── panel.py                # Collapsible panel with a persistent header
+    ├── viewport.py             # Scrollable canvas wrapper (scrollbars, wheel, drag pan)
+    ├── text_detail.py          # Truncation helpers and click-to-expand detail popup
+    └── dashboard.py            # Resizable primary + auxiliary + subwork segmented layout
 ```
 
 ---

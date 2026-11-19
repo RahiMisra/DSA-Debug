@@ -116,19 +116,9 @@ class MainWindow:
 
         # Right: Visualization View
         viz_container = tk.Frame(center_frame, bg="#0F172A")
-        self.lbl_viz = tk.Label(
-            viz_container,
-            text="Execution Visualization",
-            bg="#181825",
-            fg="#CDD6F4",
-            font=("Segoe UI", 9, "bold"),
-            padx=8,
-            pady=4,
-            anchor="w",
-        )
-        self.lbl_viz.pack(fill=tk.X)
         self.dashboard = MultiViewDashboard(viz_container)
         self.dashboard.pack(fill=tk.BOTH, expand=True)
+        self.lbl_viz = self.dashboard.primary_panel.title_label
 
         self.array_view = ArrayView(self.dashboard.primary)
         self.array_view.pack(fill=tk.BOTH, expand=True)
@@ -137,7 +127,7 @@ class MainWindow:
         self.tree_view = BinaryTreeCanvas(self.dashboard.primary)
         self.graph_view = GraphCanvas(self.dashboard.primary)
         self.auxiliary_view = AuxiliaryLinearCanvas(self.dashboard.auxiliary)
-        self.hash_view = AuxiliaryHashCanvas(self.dashboard.auxiliary)
+        self.hash_view = AuxiliaryHashCanvas(self.dashboard.hash)
         self.recursion_view = RecursionCanvas(self.dashboard.subwork)
 
         center_frame.add(viz_container, minsize=400)
@@ -342,6 +332,7 @@ class MainWindow:
             self.recursion_view.render_event(event)
             self.recursion_view.pack(fill=tk.BOTH, expand=True)
 
+        self.dashboard.set_auxiliary_panels(show_linear, show_hash)
         self.dashboard.set_workspace_visible(
             auxiliary=show_linear or show_hash,
             subwork=show_subwork,

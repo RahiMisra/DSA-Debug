@@ -7,6 +7,8 @@ import tkinter as tk
 from typing import Any, Optional, Sequence
 
 from src.execution.events import ExecutionEvent
+from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.viewport import ScrollableCanvas
 
 
 def compute_graph_layout(
@@ -77,12 +79,16 @@ class GraphCanvas(tk.Frame):
 
     def __init__(self, master: Optional[tk.Widget] = None, **kwargs) -> None:
         super().__init__(master, bg=self.BG_COLOR, **kwargs)
-        self.canvas = tk.Canvas(
+        self.viewport = ScrollableCanvas(self, bg=self.BG_COLOR)
+        self.viewport.pack(fill=tk.BOTH, expand=True)
+        self.canvas = self.viewport.canvas
+
+        self.details = TextDetailController(
             self,
-            bg=self.BG_COLOR,
-            highlightthickness=0,
+            title="Graph Vertex",
+            on_activate=self.viewport.suppress_pan_for_next_press,
         )
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.details.attach_canvas(self.canvas)
 
         self._current_state: Optional[dict[str, Any]] = None
 
@@ -101,6 +107,7 @@ class GraphCanvas(tk.Frame):
         self._current_state = state
 
         if not state:
+            self.viewport.update_scrollregion()
             return
 
         nodes: list[dict[str, Any]] = state.get("nodes", [])
@@ -130,14 +137,14 @@ class GraphCanvas(tk.Frame):
                 font=("Segoe UI", 9, "italic"),
                 tags=("graph_node_label", "empty"),
             )
+            self.viewport.update_scrollregion()
             return
 
-        width = float(self.canvas.winfo_width())
-        height = float(self.canvas.winfo_height())
-        if width < 200:
-            width = 600.0
-        if height < 200:
-            height = 400.0
+        # Give each vertex room on the ring; large graphs scroll instead of
+        # collapsing into an unreadable cluster.
+        side = max(420.0, 2.0 * (len(nodes) * 24.0 + 80.0))
+        width = side
+        height = side
 
         coords = compute_graph_layout(
             [node.get("id") for node in nodes],
@@ -213,25 +220,35 @@ class GraphCanvas(tk.Frame):
                 width=outline_width,
                 tags=("graph_node",),
             )
-            self.canvas.create_text(
+            value_text = str(node.get("val", node_id))
+            display_value, value_truncated = truncate_text(value_text, 10)
+            value_item = self.canvas.create_text(
                 x,
                 y,
-                text=str(node.get("val", node_id)),
+                text=display_value,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 10, "bold"),
                 tags=("graph_node_label",),
             )
+            if value_truncated:
+                self.details.register_item(value_item, value_text)
 
             var_list = node_pointers.get(node_id, [])
             if var_list:
-                self.canvas.create_text(
+                label_text = ", ".join(sorted(var_list))
+                display_label, label_truncated = truncate_text(label_text, 22)
+                label_item = self.canvas.create_text(
                     x,
                     y - radius - 12,
-                    text=f"{', '.join(sorted(var_list))} ↓",
+                    text=f"{display_label} ↓",
                     fill=self.POINTER_COLOR,
                     font=("Segoe UI", 9, "bold"),
                     tags=("pointer_label",),
                 )
+                if label_truncated:
+                    self.details.register_item(label_item, label_text)
+
+        self.viewport.update_scrollregion()
 
     def _draw_edge(
         self,

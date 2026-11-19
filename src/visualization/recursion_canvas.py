@@ -6,6 +6,12 @@ import tkinter as tk
 from typing import Any, Optional
 
 from src.execution.events import ExecutionEvent
+from src.visualization.text_detail import (
+    TextDetailController,
+    format_value,
+    truncate_text,
+)
+from src.visualization.viewport import ScrollableCanvas
 
 
 class RecursionCanvas(tk.Frame):
@@ -27,17 +33,20 @@ class RecursionCanvas(tk.Frame):
     FRAME_GAP = 3
     SUBARRAY_HEIGHT = 26
     SUBARRAY_GAP = 3
-    CANVAS_HEIGHT = 180
+    MIN_CONTENT_WIDTH = 900.0
 
     def __init__(self, master: Optional[tk.Widget] = None, **kwargs) -> None:
         super().__init__(master, bg=self.BG_COLOR, **kwargs)
-        self.canvas = tk.Canvas(
+        self.viewport = ScrollableCanvas(self, bg=self.BG_COLOR)
+        self.viewport.pack(fill=tk.BOTH, expand=True)
+        self.canvas = self.viewport.canvas
+
+        self.details = TextDetailController(
             self,
-            bg=self.BG_COLOR,
-            height=self.CANVAS_HEIGHT,
-            highlightthickness=0,
+            title="Recursion Detail",
+            on_activate=self.viewport.suppress_pan_for_next_press,
         )
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.details.attach_canvas(self.canvas)
 
         self._current_state: Optional[dict[str, Any]] = None
 
@@ -57,6 +66,7 @@ class RecursionCanvas(tk.Frame):
 
         if not state:
             self._draw_empty()
+            self.viewport.update_scrollregion()
             return
 
         frames = list(state.get("frames", []))
@@ -65,14 +75,16 @@ class RecursionCanvas(tk.Frame):
         last_return = state.get("last_return")
         if not frames and not subarrays and return_structure is None and not last_return:
             self._draw_empty()
+            self.viewport.update_scrollregion()
             return
 
-        width = float(self.canvas.winfo_width())
-        height = float(self.canvas.winfo_height())
-        if width < 300:
-            width = 900.0
-        if height < 100:
-            height = float(self.CANVAS_HEIGHT)
+        viewport_width, viewport_height = self.viewport.viewport_size()
+        width = max(self.MIN_CONTENT_WIDTH, float(viewport_width))
+        frames_height = 60.0 + len(frames) * (self.FRAME_HEIGHT + self.FRAME_GAP)
+        subarrays_height = 60.0 + len(subarrays) * (
+            self.SUBARRAY_HEIGHT + self.SUBARRAY_GAP
+        )
+        height = max(float(viewport_height), frames_height, subarrays_height, 160.0)
 
         frames_width = width * 0.46
         subarrays_width = width * 0.30
@@ -88,6 +100,8 @@ class RecursionCanvas(tk.Frame):
             return_width,
             height,
         )
+
+        self.viewport.update_scrollregion()
 
     # ------------------------------------------------------------------
     # Call stack
@@ -123,10 +137,7 @@ class RecursionCanvas(tk.Frame):
             )
             return
 
-        max_rows = max(
-            1,
-            int((bottom - top) // (self.FRAME_HEIGHT + self.FRAME_GAP)),
-        )
+        max_rows = max(1, len(frames))
         visible = frames[-max_rows:]
         hidden = len(frames) - len(visible)
         active_depth = frames[-1].get("depth")
@@ -157,15 +168,18 @@ class RecursionCanvas(tk.Frame):
             label = f"#{depth} {function}"
             if args_text:
                 label += f"({args_text})"
-            self.canvas.create_text(
+            display_label, label_truncated = truncate_text(label, 56)
+            label_item = self.canvas.create_text(
                 left + 10.0,
                 (row_top + row_bottom) / 2.0,
-                text=self._truncate(label, 56),
+                text=display_label,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 8, "bold"),
                 anchor="w",
                 tags=("recursion_frame_label", f"recursion_frame_label_{function}"),
             )
+            if label_truncated:
+                self.details.register_item(label_item, label)
 
             if frame.get("returning") and frame.get("return_value") is not None:
                 self.canvas.create_text(
@@ -223,10 +237,7 @@ class RecursionCanvas(tk.Frame):
             )
             return
 
-        max_rows = max(
-            1,
-            int((bottom - top) // (self.SUBARRAY_HEIGHT + self.SUBARRAY_GAP)),
-        )
+        max_rows = max(1, len(subarrays))
         visible = subarrays[-max_rows:]
         hidden = len(subarrays) - len(visible)
 
@@ -246,24 +257,32 @@ class RecursionCanvas(tk.Frame):
                 width=1,
                 tags=("recursion_subarray", f"recursion_subarray_{label}"),
             )
-            self.canvas.create_text(
+            display_label, label_truncated = truncate_text(label, 18)
+            label_item = self.canvas.create_text(
                 left + 8.0,
                 row_top + 7.0,
-                text=self._truncate(label, 18),
+                text=display_label,
                 fill=self.SUBARRAY_COLOR,
                 font=("Consolas", 8, "bold"),
                 anchor="w",
                 tags=("recursion_subarray_label",),
             )
-            self.canvas.create_text(
+            if label_truncated:
+                self.details.register_item(label_item, label)
+
+            item_text = self._format_value(items)
+            display_items, items_truncated = truncate_text(item_text, 28)
+            items_item = self.canvas.create_text(
                 right - 8.0,
                 row_bottom - 7.0,
-                text=self._truncate(self._format_value(items), 28),
+                text=display_items,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 8),
                 anchor="e",
                 tags=("recursion_subarray_items",),
             )
+            if items_truncated:
+                self.details.register_item(items_item, item_text)
 
         if hidden > 0:
             self.canvas.create_text(
@@ -325,14 +344,17 @@ class RecursionCanvas(tk.Frame):
             value = last_return.get("value")
 
         value_text = "—" if value is None else self._format_value(value)
-        self.canvas.create_text(
+        display_value, value_truncated = truncate_text(value_text, 40)
+        value_item = self.canvas.create_text(
             (left + right) / 2.0,
             (top + bottom) / 2.0 + 8.0,
-            text=self._truncate(value_text, 40),
+            text=display_value,
             fill=self.TEXT_COLOR,
             font=("Consolas", 11, "bold"),
             tags=("recursion_return_value",),
         )
+        if value_truncated:
+            self.details.register_item(value_item, value_text)
 
     # ------------------------------------------------------------------
     # Shared helpers
@@ -362,20 +384,7 @@ class RecursionCanvas(tk.Frame):
         )
 
     def _format_value(self, value: Any) -> str:
-        if isinstance(value, (list, tuple)):
-            return "[" + ", ".join(self._format_value(item) for item in value) + "]"
-        if isinstance(value, dict):
-            return "{" + ", ".join(
-                f"{key}: {self._format_value(item)}"
-                for key, item in value.items()
-            ) + "}"
-        return str(value)
-
-    @staticmethod
-    def _truncate(text: str, limit: int) -> str:
-        if len(text) <= limit:
-            return text
-        return text[: max(0, limit - 1)] + "…"
+        return format_value(value)
 
     def _draw_empty(self) -> None:
         self.canvas.create_text(

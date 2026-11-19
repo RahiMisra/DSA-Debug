@@ -6,6 +6,8 @@ import tkinter as tk
 from typing import Any, Optional
 
 from src.execution.events import ExecutionEvent
+from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.viewport import ScrollableCanvas
 
 
 class AuxiliaryLinearCanvas(tk.Frame):
@@ -25,17 +27,21 @@ class AuxiliaryLinearCanvas(tk.Frame):
     ITEM_GAP = 3
     ITEM_MIN_WIDTH = 30
     ITEM_MAX_WIDTH = 44
-    CANVAS_HEIGHT = 180
+    MIN_SECTION_WIDTH = 240.0
+    MIN_CONTENT_HEIGHT = 200.0
 
     def __init__(self, master: Optional[tk.Widget] = None, **kwargs) -> None:
         super().__init__(master, bg=self.BG_COLOR, **kwargs)
-        self.canvas = tk.Canvas(
+        self.viewport = ScrollableCanvas(self, bg=self.BG_COLOR)
+        self.viewport.pack(fill=tk.BOTH, expand=True)
+        self.canvas = self.viewport.canvas
+
+        self.details = TextDetailController(
             self,
-            bg=self.BG_COLOR,
-            height=self.CANVAS_HEIGHT,
-            highlightthickness=0,
+            title="Stack / Queue Value",
+            on_activate=self.viewport.suppress_pan_for_next_press,
         )
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.details.attach_canvas(self.canvas)
 
         self._current_state: Optional[dict[str, Any]] = None
         self._current_operation: Optional[dict[str, Any]] = None
@@ -63,6 +69,7 @@ class AuxiliaryLinearCanvas(tk.Frame):
         self._current_operation = operation
 
         if not state:
+            self.viewport.update_scrollregion()
             return
 
         stacks = state.get("stacks", [])
@@ -73,22 +80,54 @@ class AuxiliaryLinearCanvas(tk.Frame):
 
         if not sections:
             self._draw_empty()
+            self.viewport.update_scrollregion()
             return
 
-        width = float(self.canvas.winfo_width())
-        height = float(self.canvas.winfo_height())
-        if width < 200:
-            width = 640.0
-        if height < 100:
-            height = float(self.CANVAS_HEIGHT)
-
-        section_width = width / len(sections)
-        for index, (kind, container) in enumerate(sections):
-            x0 = index * section_width
-            if kind == "stack":
-                self._draw_stack(container, x0, section_width, height, operation)
+        viewport_width, viewport_height = self.viewport.viewport_size()
+        section_widths: list[float] = []
+        content_height = float(self.MIN_CONTENT_HEIGHT)
+        for kind, container in sections:
+            items = list(container.get("items", []))
+            if kind == "queue":
+                required_width = max(
+                    self.MIN_SECTION_WIDTH,
+                    len(items) * (self.ITEM_MAX_WIDTH + self.ITEM_GAP) + 56.0,
+                )
             else:
-                self._draw_queue(container, x0, section_width, height, operation)
+                required_width = self.MIN_SECTION_WIDTH
+                content_height = max(
+                    content_height,
+                    72.0 + len(items) * (self.ITEM_HEIGHT + self.ITEM_GAP),
+                )
+            section_widths.append(required_width)
+
+        total_width = sum(section_widths)
+        if total_width < viewport_width:
+            extra = (viewport_width - total_width) / len(sections)
+            section_widths = [width + extra for width in section_widths]
+        content_height = max(content_height, float(viewport_height))
+
+        x0 = 0.0
+        for (kind, container), section_width in zip(sections, section_widths):
+            if kind == "stack":
+                self._draw_stack(
+                    container,
+                    x0,
+                    section_width,
+                    content_height,
+                    operation,
+                )
+            else:
+                self._draw_queue(
+                    container,
+                    x0,
+                    section_width,
+                    content_height,
+                    operation,
+                )
+            x0 += section_width
+
+        self.viewport.update_scrollregion()
 
     # ------------------------------------------------------------------
     # Stack rendering
@@ -150,14 +189,18 @@ class AuxiliaryLinearCanvas(tk.Frame):
                 width=2 if is_top and active else 1,
                 tags=("stack_item", f"stack_item_{name}"),
             )
-            self.canvas.create_text(
+            item_text = str(item)
+            display_item, item_truncated = truncate_text(item_text, 12)
+            item_label = self.canvas.create_text(
                 center_x,
                 (item_top + item_bottom) / 2.0,
-                text=str(item),
+                text=display_item,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 9, "bold"),
                 tags=("stack_item_label", f"stack_item_label_{name}"),
             )
+            if item_truncated:
+                self.details.register_item(item_label, item_text)
 
         if visible:
             self.canvas.create_text(
@@ -256,14 +299,18 @@ class AuxiliaryLinearCanvas(tk.Frame):
                 width=1,
                 tags=("queue_item", f"queue_item_{name}"),
             )
-            self.canvas.create_text(
+            item_text = str(item)
+            display_item, item_truncated = truncate_text(item_text, 12)
+            item_label = self.canvas.create_text(
                 item_left + item_width / 2.0,
                 (top + bottom) / 2.0,
-                text=str(item),
+                text=display_item,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 9, "bold"),
                 tags=("queue_item_label", f"queue_item_label_{name}"),
             )
+            if item_truncated:
+                self.details.register_item(item_label, item_text)
 
         self.canvas.create_text(
             left + 8,

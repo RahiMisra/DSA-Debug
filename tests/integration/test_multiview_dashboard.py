@@ -414,7 +414,7 @@ def test_dashboard_segments_host_the_expected_views(session_tk_root: tk.Tk) -> N
     assert window.dashboard.primary is window.graph_view.master
 
     assert window.dashboard.auxiliary is window.auxiliary_view.master
-    assert window.dashboard.auxiliary is window.hash_view.master
+    assert window.dashboard.hash is window.hash_view.master
     assert window.dashboard.subwork is window.recursion_view.master
 
 
