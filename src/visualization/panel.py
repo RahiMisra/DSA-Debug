@@ -5,17 +5,19 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Callable, Optional
 
+from src.visualization.theme import PALETTE, style_button, surface_kwargs
+
 
 class CollapsiblePanel(tk.Frame):
     """A panel whose header stays visible while its body can be collapsed."""
 
-    BG_COLOR = "#0F172A"
-    HEADER_BG = "#181825"
-    TEXT_COLOR = "#CDD6F4"
-    MUTED_COLOR = "#6C7086"
-    BUTTON_BG = "#313244"
+    BG_COLOR = PALETTE.bg_base
+    HEADER_BG = PALETTE.bg_surface
+    TEXT_COLOR = PALETTE.text
+    MUTED_COLOR = PALETTE.text_muted
+    BUTTON_BG = PALETTE.button_bg
 
-    HEADER_HEIGHT = 24
+    HEADER_HEIGHT = 26
 
     def __init__(
         self,
@@ -25,7 +27,9 @@ class CollapsiblePanel(tk.Frame):
         on_toggle: Optional[Callable[[bool], None]] = None,
         **kwargs,
     ) -> None:
-        super().__init__(master, bg=self.BG_COLOR, **kwargs)
+        options = surface_kwargs(self.BG_COLOR)
+        options.update(kwargs)
+        super().__init__(master, **options)
         self._collapsed = collapsed
         self._visible = True
         self._on_toggle = on_toggle
@@ -34,18 +38,18 @@ class CollapsiblePanel(tk.Frame):
         self.header.pack(fill=tk.X, side=tk.TOP)
         self.header.pack_propagate(False)
 
+        self.header_border = tk.Frame(self, bg=PALETTE.border, height=1)
+        self.header_border.pack(fill=tk.X, side=tk.TOP)
+
         self.toggle_button = tk.Button(
             self.header,
             text="\u25be" if not collapsed else "\u25b8",
-            bg=self.BUTTON_BG,
-            fg=self.TEXT_COLOR,
             font=("Segoe UI", 8, "bold"),
-            relief="flat",
             padx=6,
             pady=0,
-            cursor="hand2",
             command=self.toggle,
         )
+        style_button(self.toggle_button, "ghost")
         self.toggle_button.pack(side=tk.RIGHT, padx=(0, 4), pady=2)
 
         self.title_label = tk.Label(

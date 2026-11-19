@@ -35,6 +35,12 @@ Rather than relying on predefined animations, Trace executes user-submitted Pyth
 
 ---
 
+## UI Style
+
+All colours and control styling come from `src/visualization/theme.py`. The palette uses a darkened three-level base (`#0B0B12`, `#12121A`, `#1A1A24`) with preserved Catppuccin accents, WCAG AA text contrast, and ttk `clam` scrollbars with themed trough, thumb, hover, and pressed states. Panels use a 1 px inset border and visible header/dashboard dividers; array cells and tree, graph, and linked-list nodes use cheap static inset lines or 2 px offset shadows for depth. Change the palette in `theme.py` rather than editing individual widgets.
+
+---
+
 ## Prerequisites
 
 - Python 3.10+ (tested on Python 3.12)
@@ -111,6 +117,7 @@ src/
     ├── panel.py                # Collapsible panel with a persistent header
     ├── viewport.py             # Scrollable canvas wrapper (scrollbars, wheel, drag pan)
     ├── text_detail.py          # Truncation helpers and click-to-expand detail popup
+    ├── theme.py                # Central palette, semantic colour maps, and ttk styling
     └── dashboard.py            # Resizable primary + auxiliary + subwork segmented layout
 ```
 

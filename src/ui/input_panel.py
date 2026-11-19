@@ -7,18 +7,21 @@ from typing import Any, Callable, Optional
 
 from src.execution.parsers import parse_leetcode_inputs
 from src.ui.presets import ARRAY_PRESET, PRESETS, Preset
+from src.visualization.theme import PALETTE, style_button, surface_kwargs
 
 
 class InputPanel(tk.Frame):
     """Panel allowing users to enter custom inputs in LeetCode format, pick presets, and configure execution."""
 
-    BG_COLOR = "#181825"
-    TEXT_COLOR = "#CDD6F4"
-    ENTRY_BG = "#313244"
-    ENTRY_FG = "#FFFFFF"
-    BTN_BG = "#45475A"
-    BTN_PRIMARY = "#89B4FA"
-    BTN_PRIMARY_FG = "#11111B"
+    BG_COLOR = PALETTE.bg_base
+    TEXT_COLOR = PALETTE.text
+    MUTED_COLOR = PALETTE.text_muted
+    ENTRY_BG = PALETTE.entry_bg
+    ENTRY_FG = PALETTE.entry_text
+    ENTRY_BORDER = PALETTE.entry_border
+    BTN_BG = PALETTE.button_bg
+    BTN_PRIMARY = PALETTE.accent
+    BTN_PRIMARY_FG = PALETTE.text_inverse
 
     DEFAULT_INPUT = ARRAY_PRESET.input_text
 
@@ -29,7 +32,13 @@ class InputPanel(tk.Frame):
         on_preset_selected: Optional[Callable[[str], None]] = None,
         **kwargs,
     ) -> None:
-        super().__init__(master, bg=self.BG_COLOR, padx=10, pady=8, **kwargs)
+        super().__init__(
+            master,
+            padx=12,
+            pady=9,
+            **surface_kwargs(self.BG_COLOR),
+            **kwargs,
+        )
         self.on_run = on_run
         self.on_preset_selected = on_preset_selected
         self.preset_buttons: dict[str, tk.Button] = {}
@@ -54,9 +63,13 @@ class InputPanel(tk.Frame):
             top_frame,
             bg=self.ENTRY_BG,
             fg=self.ENTRY_FG,
-            insertbackground="#FFFFFF",
+            insertbackground=PALETTE.entry_text,
             font=("Consolas", 11),
             relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=self.ENTRY_BORDER,
+            highlightcolor=PALETTE.focus_ring,
         )
         self.array_entry.insert(0, self.DEFAULT_INPUT)
         self.array_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10), ipady=3)
@@ -64,15 +77,12 @@ class InputPanel(tk.Frame):
         self.run_btn = tk.Button(
             top_frame,
             text="▶ Run Algorithm",
-            bg=self.BTN_PRIMARY,
-            fg=self.BTN_PRIMARY_FG,
             font=("Segoe UI", 10, "bold"),
-            relief="flat",
-            cursor="hand2",
             padx=12,
             pady=3,
             command=self._on_run_click,
         )
+        style_button(self.run_btn, "primary")
         self.run_btn.pack(side=tk.RIGHT)
 
         # Row 2: Function Name & Presets
@@ -83,7 +93,7 @@ class InputPanel(tk.Frame):
             bot_frame,
             text="Function Name (optional):",
             bg=self.BG_COLOR,
-            fg="#A6ADC8",
+            fg=self.MUTED_COLOR,
             font=("Segoe UI", 9),
         )
         lbl_func.pack(side=tk.LEFT, padx=(0, 4))
@@ -93,9 +103,13 @@ class InputPanel(tk.Frame):
             width=16,
             bg=self.ENTRY_BG,
             fg=self.ENTRY_FG,
-            insertbackground="#FFFFFF",
+            insertbackground=PALETTE.entry_text,
             font=("Consolas", 10),
             relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=self.ENTRY_BORDER,
+            highlightcolor=PALETTE.focus_ring,
         )
         self.func_entry.pack(side=tk.LEFT, padx=(0, 15), ipady=2)
 
@@ -103,7 +117,7 @@ class InputPanel(tk.Frame):
             bot_frame,
             text="LeetCode Presets:",
             bg=self.BG_COLOR,
-            fg="#A6ADC8",
+            fg=self.MUTED_COLOR,
             font=("Segoe UI", 9),
         )
         lbl_presets.pack(side=tk.LEFT, padx=(0, 6))
@@ -112,15 +126,12 @@ class InputPanel(tk.Frame):
             btn = tk.Button(
                 bot_frame,
                 text=preset.label,
-                bg=self.BTN_BG,
-                fg=self.TEXT_COLOR,
                 font=("Segoe UI", 8),
-                relief="flat",
                 padx=6,
                 pady=1,
-                cursor="hand2",
                 command=lambda p=preset: self._handle_preset(p),
             )
+            style_button(btn, "chip")
             btn.pack(side=tk.LEFT, padx=2)
             self.preset_buttons[preset.label] = btn
 

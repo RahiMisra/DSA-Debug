@@ -11,16 +11,18 @@ from src.visualization.array_state import (
     ArrayViewState,
     ElementHighlight,
 )
+from src.visualization.theme import PALETTE, style_button
 from src.visualization.viewport import ScrollableCanvas
 
 
 class ArrayView(tk.Frame):
     """Visual canvas representing array/string elements as boxed cells or vertical bars."""
 
-    BG_COLOR = "#0F172A"       # Slate 900
-    TEXT_COLOR = "#F8FAFC"     # Slate 50
-    MUTED_TEXT = "#94A3B8"     # Slate 400
-    BASELINE_COLOR = "#334155" # Slate 700
+    BG_COLOR = PALETTE.canvas_bg
+    TEXT_COLOR = PALETTE.canvas_text
+    MUTED_TEXT = PALETTE.canvas_muted
+    BASELINE_COLOR = PALETTE.canvas_baseline
+    INSET_COLOR = PALETTE.inset_highlight
 
     STYLE_BOX = "box"
     STYLE_BAR = "bar"
@@ -45,15 +47,12 @@ class ArrayView(tk.Frame):
         self.btn_toggle_style = tk.Button(
             self.toolbar,
             text="Switch to Bar View" if self._view_style == self.STYLE_BOX else "Switch to Box View",
-            bg="#1E293B",
-            fg=self.MUTED_TEXT,
             font=("Segoe UI", 8),
-            relief="flat",
             padx=6,
             pady=1,
-            cursor="hand2",
             command=self.toggle_view_style,
         )
+        style_button(self.btn_toggle_style, "ghost")
         self.btn_toggle_style.pack(side=tk.RIGHT)
 
         self.viewport = ScrollableCanvas(self, bg=self.BG_COLOR)
@@ -180,6 +179,26 @@ class ArrayView(tk.Frame):
                 outline=elem.box_border_color,
                 width=border_w,
                 tags=(f"box_{i}", "box"),
+            )
+
+            # Inset edge highlight along the top and left inner edges.
+            self.canvas.create_line(
+                x0 + 2,
+                y0 + 2,
+                x1 - 2,
+                y0 + 2,
+                fill=self.INSET_COLOR,
+                width=1,
+                tags=(f"inset_top_{i}", "box_inset"),
+            )
+            self.canvas.create_line(
+                x0 + 2,
+                y0 + 2,
+                x0 + 2,
+                y1 - 2,
+                fill=self.INSET_COLOR,
+                width=1,
+                tags=(f"inset_left_{i}", "box_inset"),
             )
 
             # Draw centered value / character

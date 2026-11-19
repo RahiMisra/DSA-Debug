@@ -6,6 +6,7 @@ import tkinter as tk
 from typing import Optional
 
 from src.visualization.panel import CollapsiblePanel
+from src.visualization.theme import PALETTE
 
 
 class MultiViewDashboard(tk.Frame):
@@ -16,7 +17,8 @@ class MultiViewDashboard(tk.Frame):
     two-column grid for the auxiliary and subwork segments.
     """
 
-    BG_COLOR = "#0F172A"
+    BG_COLOR = PALETTE.bg_base
+    DIVIDER_COLOR = PALETTE.divider
     MIN_PRIMARY_HEIGHT = 180
     MIN_WORKSPACE_HEIGHT = 120
     MIN_SEGMENT_WIDTH = 180
@@ -27,7 +29,7 @@ class MultiViewDashboard(tk.Frame):
         self.panes = tk.PanedWindow(
             self,
             orient=tk.VERTICAL,
-            bg=self.BG_COLOR,
+            bg=self.DIVIDER_COLOR,
             sashwidth=7,
             sashrelief=tk.FLAT,
             bd=0,

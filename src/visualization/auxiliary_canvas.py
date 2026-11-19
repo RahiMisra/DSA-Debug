@@ -7,21 +7,23 @@ from typing import Any, Optional
 
 from src.execution.events import ExecutionEvent
 from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.theme import PALETTE
 from src.visualization.viewport import ScrollableCanvas
 
 
 class AuxiliaryLinearCanvas(tk.Frame):
     """Renders auxiliary stacks as vertical towers and queues as horizontal pipes."""
 
-    BG_COLOR = "#181825"
-    PANEL_BG = "#1E1E2E"
-    ITEM_BG = "#313244"
-    TEXT_COLOR = "#CDD6F4"
-    MUTED_COLOR = "#6C7086"
-    STACK_COLOR = "#89B4FA"
-    QUEUE_COLOR = "#A6E3A1"
-    OP_COLOR = "#F9E2AF"
-    EMPTY_COLOR = "#6C7086"
+    BG_COLOR = PALETTE.canvas_bg
+    PANEL_BG = PALETTE.canvas_surface
+    ITEM_BG = PALETTE.node_bg
+    TEXT_COLOR = PALETTE.canvas_text
+    MUTED_COLOR = PALETTE.canvas_muted
+    STACK_COLOR = PALETTE.stack
+    QUEUE_COLOR = PALETTE.queue
+    OP_COLOR = PALETTE.operation
+    EMPTY_COLOR = PALETTE.canvas_empty
+    INSET_COLOR = PALETTE.inset_highlight
 
     ITEM_HEIGHT = 20
     ITEM_GAP = 3
@@ -168,6 +170,15 @@ class AuxiliaryLinearCanvas(tk.Frame):
             width=2 if active else 1,
             tags=("stack_container", f"stack_container_{name}"),
         )
+        self.canvas.create_line(
+            left + 2,
+            top + 2,
+            right - 2,
+            top + 2,
+            fill=self.INSET_COLOR,
+            width=1,
+            tags=("stack_container_inset",),
+        )
 
         item_height = self.ITEM_HEIGHT
         item_gap = self.ITEM_GAP
@@ -266,6 +277,15 @@ class AuxiliaryLinearCanvas(tk.Frame):
             outline=outline,
             width=2 if active else 1,
             tags=("queue_container", f"queue_container_{name}"),
+        )
+        self.canvas.create_line(
+            left + 2,
+            top + 2,
+            right - 2,
+            top + 2,
+            fill=self.INSET_COLOR,
+            width=1,
+            tags=("queue_container_inset",),
         )
 
         if not items:

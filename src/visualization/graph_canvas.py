@@ -8,6 +8,7 @@ from typing import Any, Optional, Sequence
 
 from src.execution.events import ExecutionEvent
 from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.theme import GRAPH_STATE_FILL_COLORS, PALETTE
 from src.visualization.viewport import ScrollableCanvas
 
 
@@ -48,18 +49,19 @@ def compute_graph_layout(
 class GraphCanvas(tk.Frame):
     """Visualizes graphs with circular vertex placement, edges, and traversal states."""
 
-    BG_COLOR = "#181825"
-    NODE_BG = "#313244"
-    TEXT_COLOR = "#CDD6F4"
-    POINTER_COLOR = "#F9E2AF"
-    EDGE_COLOR = "#6C7086"
-    ACTIVE_EDGE_COLOR = "#F9E2AF"
-    NULL_COLOR = "#6C7086"
+    BG_COLOR = PALETTE.canvas_bg
+    NODE_BG = PALETTE.node_bg
+    TEXT_COLOR = PALETTE.canvas_text
+    POINTER_COLOR = PALETTE.pointer
+    EDGE_COLOR = PALETTE.edge
+    ACTIVE_EDGE_COLOR = PALETTE.pointer
+    NULL_COLOR = PALETTE.null
+    SHADOW_COLOR = PALETTE.shadow
 
-    UNVISITED_OUTLINE = "#6C7086"
-    FRONTIER_OUTLINE = "#F9E2AF"
-    EXPLORED_OUTLINE = "#A6E3A1"
-    ACTIVE_OUTLINE = "#F38BA8"
+    UNVISITED_OUTLINE = PALETTE.null
+    FRONTIER_OUTLINE = PALETTE.pointer
+    EXPLORED_OUTLINE = PALETTE.success
+    ACTIVE_OUTLINE = PALETTE.danger
 
     STATE_OUTLINE = {
         "unvisited": UNVISITED_OUTLINE,
@@ -70,9 +72,9 @@ class GraphCanvas(tk.Frame):
 
     STATE_FILL = {
         "unvisited": NODE_BG,
-        "frontier": "#3E3A2B",
-        "explored": "#1E3A2F",
-        "active": "#3A2430",
+        "frontier": GRAPH_STATE_FILL_COLORS["frontier"],
+        "explored": GRAPH_STATE_FILL_COLORS["explored"],
+        "active": GRAPH_STATE_FILL_COLORS["active"],
     }
 
     NODE_RADIUS = 18.0
@@ -123,7 +125,7 @@ class GraphCanvas(tk.Frame):
                 start_y,
                 start_x + 130,
                 start_y + 40,
-                fill="#1E1E2E",
+                fill=PALETTE.editor_bg,
                 outline=self.NULL_COLOR,
                 width=1,
                 dash=(3, 3),
@@ -209,6 +211,17 @@ class GraphCanvas(tk.Frame):
             outline = self.STATE_OUTLINE.get(state_name, self.UNVISITED_OUTLINE)
             fill = self.STATE_FILL.get(state_name, self.NODE_BG)
             outline_width = 3 if is_active else 1.5
+
+            # Soft drop shadow behind the vertex.
+            self.canvas.create_oval(
+                x - radius + 2,
+                y - radius + 2,
+                x + radius + 2,
+                y + radius + 2,
+                fill=self.SHADOW_COLOR,
+                outline="",
+                tags=("graph_node_shadow",),
+            )
 
             self.canvas.create_oval(
                 x - radius,

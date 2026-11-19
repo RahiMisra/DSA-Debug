@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import ttk
 from typing import Optional
+
+from src.visualization.theme import (
+    HORIZONTAL_SCROLLBAR_STYLE,
+    PALETTE,
+    VERTICAL_SCROLLBAR_STYLE,
+)
 
 
 class ScrollableCanvas(tk.Frame):
@@ -13,7 +20,7 @@ class ScrollableCanvas(tk.Frame):
     size and let the user scroll instead of shrinking the visualization.
     """
 
-    BG_COLOR = "#0F172A"
+    BG_COLOR = PALETTE.canvas_bg
 
     def __init__(
         self,
@@ -37,14 +44,16 @@ class ScrollableCanvas(tk.Frame):
         if canvas_height is not None:
             self.canvas.configure(height=canvas_height)
 
-        self.h_scrollbar = tk.Scrollbar(
+        self.h_scrollbar = ttk.Scrollbar(
             self,
             orient=tk.HORIZONTAL,
+            style=HORIZONTAL_SCROLLBAR_STYLE,
             command=self.canvas.xview,
         )
-        self.v_scrollbar = tk.Scrollbar(
+        self.v_scrollbar = ttk.Scrollbar(
             self,
             orient=tk.VERTICAL,
+            style=VERTICAL_SCROLLBAR_STYLE,
             command=self.canvas.yview,
         )
         self.canvas.configure(

@@ -11,23 +11,25 @@ from src.visualization.text_detail import (
     format_value,
     truncate_text,
 )
+from src.visualization.theme import PALETTE
 from src.visualization.viewport import ScrollableCanvas
 
 
 class RecursionCanvas(tk.Frame):
     """Renders the active call stack, intermediate sub-arrays, and returned structure."""
 
-    BG_COLOR = "#181825"
-    PANEL_BG = "#1E1E2E"
-    ITEM_BG = "#313244"
-    ACTIVE_BG = "#45475A"
-    TEXT_COLOR = "#CDD6F4"
-    MUTED_COLOR = "#6C7086"
-    FRAME_COLOR = "#89B4FA"
-    SUBARRAY_COLOR = "#A6E3A1"
-    RETURN_COLOR = "#F5C2E7"
-    OP_COLOR = "#F9E2AF"
-    EMPTY_COLOR = "#6C7086"
+    BG_COLOR = PALETTE.canvas_bg
+    PANEL_BG = PALETTE.canvas_surface
+    ITEM_BG = PALETTE.node_bg
+    ACTIVE_BG = PALETTE.canvas_active
+    TEXT_COLOR = PALETTE.canvas_text
+    MUTED_COLOR = PALETTE.canvas_muted
+    FRAME_COLOR = PALETTE.recursion_frame
+    SUBARRAY_COLOR = PALETTE.recursion_subarray
+    RETURN_COLOR = PALETTE.recursion_return
+    OP_COLOR = PALETTE.operation
+    EMPTY_COLOR = PALETTE.canvas_empty
+    INSET_COLOR = PALETTE.inset_highlight
 
     FRAME_HEIGHT = 24
     FRAME_GAP = 3
@@ -328,6 +330,15 @@ class RecursionCanvas(tk.Frame):
             outline=self.RETURN_COLOR,
             width=1,
             tags=("recursion_return",),
+        )
+        self.canvas.create_line(
+            left + 2,
+            top + 2,
+            right - 2,
+            top + 2,
+            fill=self.INSET_COLOR,
+            width=1,
+            tags=("recursion_return_inset",),
         )
         self.canvas.create_text(
             left + 10.0,

@@ -7,22 +7,24 @@ from typing import Any, Optional
 
 from src.execution.events import ExecutionEvent
 from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.theme import PALETTE
 from src.visualization.viewport import ScrollableCanvas
 
 
 class LinkedListCanvas(tk.Frame):
     """Visualizes singly-linked lists with nodes, directional pointer arrows, active variable labels, and cycles."""
 
-    BG_COLOR = "#181825"
-    NODE_BG = "#313244"
-    NODE_OUTLINE = "#89B4FA"
-    NODE_ACTIVE_OUTLINE = "#F9E2AF"
-    NEXT_BOX_BG = "#45475A"
-    TEXT_COLOR = "#CDD6F4"
-    POINTER_COLOR = "#F9E2AF"
-    ARROW_COLOR = "#89B4FA"
-    CYCLE_ARROW_COLOR = "#F38BA8"
-    NULL_COLOR = "#6C7086"
+    BG_COLOR = PALETTE.canvas_bg
+    NODE_BG = PALETTE.node_bg
+    NODE_OUTLINE = PALETTE.node_border
+    NODE_ACTIVE_OUTLINE = PALETTE.node_active_border
+    NEXT_BOX_BG = PALETTE.bg_item
+    TEXT_COLOR = PALETTE.canvas_text
+    POINTER_COLOR = PALETTE.pointer
+    ARROW_COLOR = PALETTE.accent
+    CYCLE_ARROW_COLOR = PALETTE.cycle
+    NULL_COLOR = PALETTE.null
+    SHADOW_COLOR = PALETTE.shadow
 
     NODE_VAL_WIDTH = 48
     NODE_PTR_WIDTH = 28
@@ -79,7 +81,7 @@ class LinkedListCanvas(tk.Frame):
                 self.START_Y,
                 self.START_X + 110,
                 self.START_Y + self.NODE_HEIGHT,
-                fill="#1E1E2E",
+                fill=PALETTE.editor_bg,
                 outline=self.NULL_COLOR,
                 width=1,
                 dash=(3, 3),
@@ -133,6 +135,17 @@ class LinkedListCanvas(tk.Frame):
             x1, y1 = curr_x, y
             x2, y2 = curr_x + total_node_width, y + self.NODE_HEIGHT
             node_coords[node_id] = (x1, y1, x2, y2)
+
+            # Soft drop shadow behind the node card.
+            self.canvas.create_rectangle(
+                x1 + 2,
+                y1 + 2,
+                x2 + 2,
+                y2 + 2,
+                fill=self.SHADOW_COLOR,
+                outline="",
+                tags=("node_shadow",),
+            )
 
             # Node value compartment
             self.canvas.create_rectangle(

@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import ttk
 from typing import Any, Callable, Optional
+
+from src.visualization.theme import (
+    PALETTE,
+    VERTICAL_SCROLLBAR_STYLE,
+    style_button,
+)
 
 
 ELLIPSIS = "\u2026"
@@ -45,16 +52,16 @@ class DetailPopup(tk.Toplevel):
         self._closed = False
 
         self.title(title)
-        self.configure(bg="#181825")
+        self.configure(bg=PALETTE.bg_base)
         self.resizable(True, True)
 
-        header = tk.Frame(self, bg="#181825")
+        header = tk.Frame(self, bg=PALETTE.bg_surface)
         header.pack(fill=tk.X)
         self.title_label = tk.Label(
             header,
             text=title,
-            bg="#181825",
-            fg="#CDD6F4",
+            bg=PALETTE.bg_surface,
+            fg=PALETTE.text,
             font=("Segoe UI", 9, "bold"),
             anchor="w",
             padx=8,
@@ -64,35 +71,36 @@ class DetailPopup(tk.Toplevel):
         self.close_button = tk.Button(
             header,
             text="\u2715",
-            bg="#313244",
-            fg="#CDD6F4",
             font=("Segoe UI", 9, "bold"),
-            relief="flat",
             padx=6,
-            cursor="hand2",
             command=self.close,
         )
+        style_button(self.close_button, "ghost")
         self.close_button.pack(side=tk.RIGHT, padx=6, pady=4)
 
-        body = tk.Frame(self, bg="#1E1E2E")
+        body = tk.Frame(self, bg=PALETTE.editor_bg)
         body.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
 
         self.text_widget = tk.Text(
             body,
-            bg="#1E1E2E",
-            fg="#CDD6F4",
-            insertbackground="#CDD6F4",
+            bg=PALETTE.editor_bg,
+            fg=PALETTE.text,
+            insertbackground=PALETTE.text,
+            selectbackground=PALETTE.bg_active,
+            selectforeground=PALETTE.text,
             wrap="word",
             relief="flat",
+            bd=0,
             height=8,
             width=52,
             padx=6,
             pady=6,
             font=("Consolas", 10),
         )
-        self.scrollbar = tk.Scrollbar(
+        self.scrollbar = ttk.Scrollbar(
             body,
             orient=tk.VERTICAL,
+            style=VERTICAL_SCROLLBAR_STYLE,
             command=self.text_widget.yview,
         )
         self.text_widget.configure(yscrollcommand=self.scrollbar.set)

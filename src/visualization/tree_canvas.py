@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from src.execution.events import ExecutionEvent
 from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.theme import PALETTE
 from src.visualization.viewport import ScrollableCanvas
 
 
@@ -66,14 +67,15 @@ def compute_tree_layout(
 class BinaryTreeCanvas(tk.Frame):
     """Visualizes binary trees with circular nodes, branch connections, and variable pointers."""
 
-    BG_COLOR = "#181825"
-    NODE_BG = "#313244"
-    NODE_OUTLINE = "#89B4FA"
-    NODE_ACTIVE_OUTLINE = "#F9E2AF"
-    TEXT_COLOR = "#CDD6F4"
-    BRANCH_COLOR = "#6C7086"
-    POINTER_COLOR = "#F9E2AF"
-    NULL_COLOR = "#6C7086"
+    BG_COLOR = PALETTE.canvas_bg
+    NODE_BG = PALETTE.node_bg
+    NODE_OUTLINE = PALETTE.node_border
+    NODE_ACTIVE_OUTLINE = PALETTE.node_active_border
+    TEXT_COLOR = PALETTE.canvas_text
+    BRANCH_COLOR = PALETTE.edge
+    POINTER_COLOR = PALETTE.pointer
+    NULL_COLOR = PALETTE.null
+    SHADOW_COLOR = PALETTE.shadow
 
     NODE_RADIUS = 18
 
@@ -126,7 +128,7 @@ class BinaryTreeCanvas(tk.Frame):
                 start_y,
                 start_x + 120,
                 start_y + 40,
-                fill="#1E1E2E",
+                fill=PALETTE.editor_bg,
                 outline=self.NULL_COLOR,
                 width=1,
                 dash=(3, 3),
@@ -189,6 +191,17 @@ class BinaryTreeCanvas(tk.Frame):
             is_active = any(v in ("curr", "node", "p", "q") for v in var_list)
             outline_color = self.NODE_ACTIVE_OUTLINE if is_active else self.NODE_OUTLINE
             outline_width = 3 if is_active else 1.5
+
+            # Soft drop shadow behind the node circle.
+            self.canvas.create_oval(
+                x - r + 2,
+                y - r + 2,
+                x + r + 2,
+                y + r + 2,
+                fill=self.SHADOW_COLOR,
+                outline="",
+                tags=("tree_node_shadow",),
+            )
 
             self.canvas.create_oval(
                 x - r,

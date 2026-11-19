@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from src.execution.events import ExecutionEvent
 from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.theme import PALETTE
 from src.visualization.viewport import ScrollableCanvas
 
 
@@ -16,16 +17,17 @@ _MISSING = object()
 class AuxiliaryHashCanvas(tk.Frame):
     """Renders auxiliary maps as key/value tables and sets as badge clouds."""
 
-    BG_COLOR = "#181825"
-    PANEL_BG = "#1E1E2E"
-    ITEM_BG = "#313244"
-    ACTIVE_BG = "#45475A"
-    TEXT_COLOR = "#CDD6F4"
-    MUTED_COLOR = "#6C7086"
-    MAP_COLOR = "#CBA6F7"
-    SET_COLOR = "#F5C2E7"
-    OP_COLOR = "#F9E2AF"
-    EMPTY_COLOR = "#6C7086"
+    BG_COLOR = PALETTE.canvas_bg
+    PANEL_BG = PALETTE.canvas_surface
+    ITEM_BG = PALETTE.node_bg
+    ACTIVE_BG = PALETTE.canvas_active
+    TEXT_COLOR = PALETTE.canvas_text
+    MUTED_COLOR = PALETTE.canvas_muted
+    MAP_COLOR = PALETTE.hash_map
+    SET_COLOR = PALETTE.hash_set
+    OP_COLOR = PALETTE.operation
+    EMPTY_COLOR = PALETTE.canvas_empty
+    INSET_COLOR = PALETTE.inset_highlight
 
     ROW_HEIGHT = 20
     ROW_GAP = 2
@@ -180,6 +182,15 @@ class AuxiliaryHashCanvas(tk.Frame):
             width=2 if active else 1,
             tags=("hash_map", f"hash_map_{name}"),
         )
+        self.canvas.create_line(
+            left + 2,
+            top + 2,
+            right - 2,
+            top + 2,
+            fill=self.INSET_COLOR,
+            width=1,
+            tags=("hash_map_inset",),
+        )
 
         if not entries:
             self.canvas.create_text(
@@ -327,6 +338,15 @@ class AuxiliaryHashCanvas(tk.Frame):
             outline=outline,
             width=2 if active else 1,
             tags=("hash_set", f"hash_set_{name}"),
+        )
+        self.canvas.create_line(
+            left + 2,
+            top + 2,
+            right - 2,
+            top + 2,
+            fill=self.INSET_COLOR,
+            width=1,
+            tags=("hash_set_inset",),
         )
 
         if not items:

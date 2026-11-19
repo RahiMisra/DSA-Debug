@@ -20,6 +20,7 @@ from src.visualization.graph_canvas import GraphCanvas
 from src.visualization.hash_canvas import AuxiliaryHashCanvas
 from src.visualization.linked_list_canvas import LinkedListCanvas
 from src.visualization.recursion_canvas import RecursionCanvas
+from src.visualization.theme import PALETTE, apply_theme, surface_kwargs
 from src.visualization.tree_canvas import BinaryTreeCanvas
 
 
@@ -49,12 +50,13 @@ class MainWindow:
         self._create_layout()
 
     def _configure_window(self) -> None:
+        apply_theme(self.root)
         self.root.title(self.DEFAULT_TITLE)
         self.root.geometry(f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
         self.root.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
         self.root.resizable(True, True)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
-        self.root.configure(bg="#11111B")
+        self.root.configure(bg=PALETTE.bg_root)
 
     def _create_layout(self) -> None:
         # 1. Top Panel: Array Input & Run
@@ -69,8 +71,8 @@ class MainWindow:
         self.error_banner = tk.Label(
             self.root,
             text="",
-            bg="#F38BA8",
-            fg="#11111B",
+            bg=PALETTE.danger,
+            fg=PALETTE.text_inverse,
             font=("Segoe UI", 10, "bold"),
             padx=10,
             pady=6,
@@ -91,19 +93,23 @@ class MainWindow:
         center_frame = tk.PanedWindow(
             self.root,
             orient=tk.HORIZONTAL,
-            bg="#181825",
+            bg=PALETTE.divider,
             sashwidth=6,
             bd=0,
+            sashrelief=tk.FLAT,
         )
         center_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         # Left: Code Editor
-        editor_container = tk.Frame(center_frame, bg="#1E1E2E")
+        editor_container = tk.Frame(
+            center_frame,
+            **surface_kwargs(PALETTE.bg_base),
+        )
         lbl_editor = tk.Label(
             editor_container,
             text="Algorithm Source Code (Python)",
-            bg="#181825",
-            fg="#CDD6F4",
+            bg=PALETTE.bg_surface,
+            fg=PALETTE.text,
             font=("Segoe UI", 9, "bold"),
             padx=8,
             pady=4,
@@ -115,7 +121,7 @@ class MainWindow:
         center_frame.add(editor_container, minsize=380, width=480)
 
         # Right: Visualization View
-        viz_container = tk.Frame(center_frame, bg="#0F172A")
+        viz_container = tk.Frame(center_frame, bg=PALETTE.bg_base)
         self.dashboard = MultiViewDashboard(viz_container)
         self.dashboard.pack(fill=tk.BOTH, expand=True)
         self.lbl_viz = self.dashboard.primary_panel.title_label
