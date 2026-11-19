@@ -6,21 +6,25 @@ import tkinter as tk
 from typing import Any, Optional
 
 from src.execution.events import ExecutionEvent
+from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.theme import PALETTE
+from src.visualization.viewport import ScrollableCanvas
 
 
 class LinkedListCanvas(tk.Frame):
     """Visualizes singly-linked lists with nodes, directional pointer arrows, active variable labels, and cycles."""
 
-    BG_COLOR = "#181825"
-    NODE_BG = "#313244"
-    NODE_OUTLINE = "#89B4FA"
-    NODE_ACTIVE_OUTLINE = "#F9E2AF"
-    NEXT_BOX_BG = "#45475A"
-    TEXT_COLOR = "#CDD6F4"
-    POINTER_COLOR = "#F9E2AF"
-    ARROW_COLOR = "#89B4FA"
-    CYCLE_ARROW_COLOR = "#F38BA8"
-    NULL_COLOR = "#6C7086"
+    BG_COLOR = PALETTE.canvas_bg
+    NODE_BG = PALETTE.node_bg
+    NODE_OUTLINE = PALETTE.node_border
+    NODE_ACTIVE_OUTLINE = PALETTE.node_active_border
+    NEXT_BOX_BG = PALETTE.bg_item
+    TEXT_COLOR = PALETTE.canvas_text
+    POINTER_COLOR = PALETTE.pointer
+    ARROW_COLOR = PALETTE.accent
+    CYCLE_ARROW_COLOR = PALETTE.cycle
+    NULL_COLOR = PALETTE.null
+    SHADOW_COLOR = PALETTE.shadow
 
     NODE_VAL_WIDTH = 48
     NODE_PTR_WIDTH = 28
@@ -31,12 +35,16 @@ class LinkedListCanvas(tk.Frame):
 
     def __init__(self, master: Optional[tk.Widget] = None, **kwargs) -> None:
         super().__init__(master, bg=self.BG_COLOR, **kwargs)
-        self.canvas = tk.Canvas(
+        self.viewport = ScrollableCanvas(self, bg=self.BG_COLOR)
+        self.viewport.pack(fill=tk.BOTH, expand=True)
+        self.canvas = self.viewport.canvas
+
+        self.details = TextDetailController(
             self,
-            bg=self.BG_COLOR,
-            highlightthickness=0,
+            title="Linked List Node",
+            on_activate=self.viewport.suppress_pan_for_next_press,
         )
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.details.attach_canvas(self.canvas)
 
         self._current_state: Optional[dict[str, Any]] = None
 
@@ -55,6 +63,7 @@ class LinkedListCanvas(tk.Frame):
         self._current_state = state
 
         if not state:
+            self.viewport.update_scrollregion()
             return
 
         nodes: list[dict[str, Any]] = state.get("nodes", [])
@@ -72,7 +81,7 @@ class LinkedListCanvas(tk.Frame):
                 self.START_Y,
                 self.START_X + 110,
                 self.START_Y + self.NODE_HEIGHT,
-                fill="#1E1E2E",
+                fill=PALETTE.editor_bg,
                 outline=self.NULL_COLOR,
                 width=1,
                 dash=(3, 3),
@@ -97,6 +106,7 @@ class LinkedListCanvas(tk.Frame):
                     font=("Segoe UI", 9, "bold"),
                     tags=("pointer_label",),
                 )
+            self.viewport.update_scrollregion()
             return
 
         # Invert pointers: node_id -> list of variable names
@@ -126,6 +136,17 @@ class LinkedListCanvas(tk.Frame):
             x2, y2 = curr_x + total_node_width, y + self.NODE_HEIGHT
             node_coords[node_id] = (x1, y1, x2, y2)
 
+            # Soft drop shadow behind the node card.
+            self.canvas.create_rectangle(
+                x1 + 2,
+                y1 + 2,
+                x2 + 2,
+                y2 + 2,
+                fill=self.SHADOW_COLOR,
+                outline="",
+                tags=("node_shadow",),
+            )
+
             # Node value compartment
             self.canvas.create_rectangle(
                 x1,
@@ -137,14 +158,18 @@ class LinkedListCanvas(tk.Frame):
                 width=outline_width,
                 tags=("node_box",),
             )
-            self.canvas.create_text(
+            value_text = str(val)
+            display_value, value_truncated = truncate_text(value_text, 12)
+            value_item = self.canvas.create_text(
                 x1 + self.NODE_VAL_WIDTH / 2,
                 y1 + self.NODE_HEIGHT / 2,
-                text=str(val),
+                text=display_value,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 11, "bold"),
                 tags=("node_val",),
             )
+            if value_truncated:
+                self.details.register_item(value_item, value_text)
 
             # Next pointer compartment
             ptr_x1 = x1 + self.NODE_VAL_WIDTH
@@ -172,14 +197,17 @@ class LinkedListCanvas(tk.Frame):
             if var_list:
                 label_text = ", ".join(sorted(var_list))
                 center_x = (x1 + x2) / 2
-                self.canvas.create_text(
+                display, truncated = truncate_text(label_text, 24)
+                item_id = self.canvas.create_text(
                     center_x,
                     y1 - 18,
-                    text=f"{label_text} ↓",
+                    text=f"{display} ↓",
                     fill=self.POINTER_COLOR,
                     font=("Segoe UI", 9, "bold"),
                     tags=("pointer_label",),
                 )
+                if truncated:
+                    self.details.register_item(item_id, label_text)
 
             curr_x += total_node_width + self.NODE_SPACING
 
@@ -282,3 +310,5 @@ class LinkedListCanvas(tk.Frame):
                     font=("Segoe UI", 9, "bold"),
                     tags=("pointer_label",),
                 )
+
+        self.viewport.update_scrollregion()

@@ -11,18 +11,25 @@ from src.visualization.array_state import (
     ArrayViewState,
     ElementHighlight,
 )
+from src.visualization.theme import PALETTE, style_button
+from src.visualization.viewport import ScrollableCanvas
 
 
 class ArrayView(tk.Frame):
     """Visual canvas representing array/string elements as boxed cells or vertical bars."""
 
-    BG_COLOR = "#0F172A"       # Slate 900
-    TEXT_COLOR = "#F8FAFC"     # Slate 50
-    MUTED_TEXT = "#94A3B8"     # Slate 400
-    BASELINE_COLOR = "#334155" # Slate 700
+    BG_COLOR = PALETTE.canvas_bg
+    TEXT_COLOR = PALETTE.canvas_text
+    MUTED_TEXT = PALETTE.canvas_muted
+    BASELINE_COLOR = PALETTE.canvas_baseline
+    INSET_COLOR = PALETTE.inset_highlight
 
     STYLE_BOX = "box"
     STYLE_BAR = "bar"
+
+    MIN_BOX_SIZE = 24.0
+    MAX_BOX_SIZE = 56.0
+    MIN_BAR_SLOT = 18.0
 
     def __init__(
         self,
@@ -40,23 +47,17 @@ class ArrayView(tk.Frame):
         self.btn_toggle_style = tk.Button(
             self.toolbar,
             text="Switch to Bar View" if self._view_style == self.STYLE_BOX else "Switch to Box View",
-            bg="#1E293B",
-            fg=self.MUTED_TEXT,
             font=("Segoe UI", 8),
-            relief="flat",
             padx=6,
             pady=1,
-            cursor="hand2",
             command=self.toggle_view_style,
         )
+        style_button(self.btn_toggle_style, "ghost")
         self.btn_toggle_style.pack(side=tk.RIGHT)
 
-        self.canvas = tk.Canvas(
-            self,
-            bg=self.BG_COLOR,
-            highlightthickness=0,
-        )
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.viewport = ScrollableCanvas(self, bg=self.BG_COLOR)
+        self.viewport.pack(fill=tk.BOTH, expand=True)
+        self.canvas = self.viewport.canvas
 
         self._current_state: ArrayViewState = ArrayViewState.from_array([])
         self.canvas.bind("<Configure>", self._on_resize)
@@ -126,12 +127,14 @@ class ArrayView(tk.Frame):
                 fill=self.MUTED_TEXT,
                 font=("Consolas", 14, "italic"),
             )
+            self.viewport.update_scrollregion()
             return
 
         if self._view_style == self.STYLE_BAR:
             self._render_bars(width, height, elements)
         else:
             self._render_boxes(width, height, elements)
+        self.viewport.update_scrollregion()
 
     def _render_boxes(self, width: int, height: int, elements: list) -> None:
         """Render array/string elements as horizontal boxed cells with centered values."""
@@ -139,24 +142,19 @@ class ArrayView(tk.Frame):
         pad_x = 24.0
         avail_w = max(20.0, width - 2 * pad_x)
 
-        # Dynamic box sizing based on element count
-        max_box_size = 56.0
-        min_box_size = 24.0
-
-        # Space per item
+        # Keep cells readable and let the viewport scroll when the array is wide.
         ideal_spacing = 8.0
         computed_size = (avail_w - (n - 1) * ideal_spacing) / n
 
-        if computed_size >= min_box_size:
-            box_size = min(max_box_size, computed_size)
+        if computed_size >= self.MIN_BOX_SIZE:
+            box_size = min(self.MAX_BOX_SIZE, computed_size)
             spacing = ideal_spacing
         else:
-            # Dense view
-            box_size = max(18.0, (avail_w - (n - 1) * 3.0) / n)
-            spacing = max(2.0, min(6.0, box_size * 0.15))
+            box_size = self.MIN_BOX_SIZE
+            spacing = ideal_spacing
 
         total_w = n * box_size + (n - 1) * spacing
-        start_x = max(pad_x, (width - total_w) / 2)
+        start_x = pad_x if total_w >= avail_w else (width - total_w) / 2
         center_y = height / 2 - 8.0
 
         y0 = center_y - box_size / 2
@@ -181,6 +179,26 @@ class ArrayView(tk.Frame):
                 outline=elem.box_border_color,
                 width=border_w,
                 tags=(f"box_{i}", "box"),
+            )
+
+            # Inset edge highlight along the top and left inner edges.
+            self.canvas.create_line(
+                x0 + 2,
+                y0 + 2,
+                x1 - 2,
+                y0 + 2,
+                fill=self.INSET_COLOR,
+                width=1,
+                tags=(f"inset_top_{i}", "box_inset"),
+            )
+            self.canvas.create_line(
+                x0 + 2,
+                y0 + 2,
+                x0 + 2,
+                y1 - 2,
+                fill=self.INSET_COLOR,
+                width=1,
+                tags=(f"inset_left_{i}", "box_inset"),
             )
 
             # Draw centered value / character
@@ -213,7 +231,6 @@ class ArrayView(tk.Frame):
         available_w = max(10, width - 2 * pad_x)
         available_h = max(20, height - pad_top - pad_bottom)
         baseline_y = height - pad_bottom
-
         # Draw baseline
         self.canvas.create_line(
             pad_x,
@@ -234,7 +251,7 @@ class ArrayView(tk.Frame):
             max_val = 1.0
             val_range = 1.0
 
-        slot_w = available_w / n
+        slot_w = max(self.MIN_BAR_SLOT, available_w / n)
         spacing = max(1.0, min(8.0, slot_w * 0.15))
         bar_w = max(1.0, slot_w - spacing)
         min_bar_h = 16.0

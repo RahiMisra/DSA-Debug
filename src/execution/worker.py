@@ -257,6 +257,8 @@ def _select_primary_list(inputs: Any) -> Optional[list[Any]]:
     """Return the array-like input used for the primary event snapshots."""
     if isinstance(inputs, list):
         return list(inputs)
+    if isinstance(inputs, str):
+        return list(inputs)
     if not isinstance(inputs, dict):
         return None
 
@@ -267,6 +269,11 @@ def _select_primary_list(inputs: Any) -> Optional[list[Any]]:
             return value.to_list()
         if isinstance(value, TreeNode):
             return value.to_level_order()
+
+    # Strings are a fallback so mixed inputs still prefer explicit arrays.
+    for value in inputs.values():
+        if isinstance(value, str):
+            return list(value)
     return None
 
 

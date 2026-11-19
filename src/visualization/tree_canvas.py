@@ -6,6 +6,9 @@ import tkinter as tk
 from typing import Any, Optional
 
 from src.execution.events import ExecutionEvent
+from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.theme import PALETTE
+from src.visualization.viewport import ScrollableCanvas
 
 
 def compute_tree_layout(
@@ -64,25 +67,30 @@ def compute_tree_layout(
 class BinaryTreeCanvas(tk.Frame):
     """Visualizes binary trees with circular nodes, branch connections, and variable pointers."""
 
-    BG_COLOR = "#181825"
-    NODE_BG = "#313244"
-    NODE_OUTLINE = "#89B4FA"
-    NODE_ACTIVE_OUTLINE = "#F9E2AF"
-    TEXT_COLOR = "#CDD6F4"
-    BRANCH_COLOR = "#6C7086"
-    POINTER_COLOR = "#F9E2AF"
-    NULL_COLOR = "#6C7086"
+    BG_COLOR = PALETTE.canvas_bg
+    NODE_BG = PALETTE.node_bg
+    NODE_OUTLINE = PALETTE.node_border
+    NODE_ACTIVE_OUTLINE = PALETTE.node_active_border
+    TEXT_COLOR = PALETTE.canvas_text
+    BRANCH_COLOR = PALETTE.edge
+    POINTER_COLOR = PALETTE.pointer
+    NULL_COLOR = PALETTE.null
+    SHADOW_COLOR = PALETTE.shadow
 
     NODE_RADIUS = 18
 
     def __init__(self, master: Optional[tk.Widget] = None, **kwargs) -> None:
         super().__init__(master, bg=self.BG_COLOR, **kwargs)
-        self.canvas = tk.Canvas(
+        self.viewport = ScrollableCanvas(self, bg=self.BG_COLOR)
+        self.viewport.pack(fill=tk.BOTH, expand=True)
+        self.canvas = self.viewport.canvas
+
+        self.details = TextDetailController(
             self,
-            bg=self.BG_COLOR,
-            highlightthickness=0,
+            title="Tree Node",
+            on_activate=self.viewport.suppress_pan_for_next_press,
         )
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.details.attach_canvas(self.canvas)
 
         self._current_state: Optional[dict[str, Any]] = None
 
@@ -101,6 +109,7 @@ class BinaryTreeCanvas(tk.Frame):
         self._current_state = state
 
         if not state:
+            self.viewport.update_scrollregion()
             return
 
         root_id: Optional[int] = state.get("root_id")
@@ -119,7 +128,7 @@ class BinaryTreeCanvas(tk.Frame):
                 start_y,
                 start_x + 120,
                 start_y + 40,
-                fill="#1E1E2E",
+                fill=PALETTE.editor_bg,
                 outline=self.NULL_COLOR,
                 width=1,
                 dash=(3, 3),
@@ -143,15 +152,10 @@ class BinaryTreeCanvas(tk.Frame):
                     font=("Segoe UI", 9, "bold"),
                     tags=("pointer_label",),
                 )
+            self.viewport.update_scrollregion()
             return
 
-        width = float(self.canvas.winfo_width())
-        height = float(self.canvas.winfo_height())
-        if width < 200:
-            width = 600.0
-        if height < 200:
-            height = 400.0
-
+        width, height = self._required_canvas_size(nodes)
         coords = compute_tree_layout(nodes, root_id, canvas_width=width, canvas_height=height)
 
         # Invert pointers: node_id -> list of variable names
@@ -188,6 +192,17 @@ class BinaryTreeCanvas(tk.Frame):
             outline_color = self.NODE_ACTIVE_OUTLINE if is_active else self.NODE_OUTLINE
             outline_width = 3 if is_active else 1.5
 
+            # Soft drop shadow behind the node circle.
+            self.canvas.create_oval(
+                x - r + 2,
+                y - r + 2,
+                x + r + 2,
+                y + r + 2,
+                fill=self.SHADOW_COLOR,
+                outline="",
+                tags=("tree_node_shadow",),
+            )
+
             self.canvas.create_oval(
                 x - r,
                 y - r,
@@ -198,23 +213,61 @@ class BinaryTreeCanvas(tk.Frame):
                 width=outline_width,
                 tags=("tree_node",),
             )
-            self.canvas.create_text(
+            value_text = str(val)
+            display_value, value_truncated = truncate_text(value_text, 10)
+            value_item = self.canvas.create_text(
                 x,
                 y,
-                text=str(val),
+                text=display_value,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 10, "bold"),
                 tags=("tree_val",),
             )
+            if value_truncated:
+                self.details.register_item(value_item, value_text)
 
             # Draw pointer labels above node circle
             if var_list:
                 label_text = ", ".join(sorted(var_list))
-                self.canvas.create_text(
+                display_label, label_truncated = truncate_text(label_text, 22)
+                label_item = self.canvas.create_text(
                     x,
                     y - r - 12,
-                    text=f"{label_text} ↓",
+                    text=f"{display_label} ↓",
                     fill=self.POINTER_COLOR,
                     font=("Segoe UI", 9, "bold"),
                     tags=("pointer_label",),
                 )
+                if label_truncated:
+                    self.details.register_item(label_item, label_text)
+
+        self.viewport.update_scrollregion()
+
+    @staticmethod
+    def _required_canvas_size(
+        nodes: dict[int, dict[str, Any]],
+    ) -> tuple[float, float]:
+        """Compute a natural canvas size from node count and tree depth."""
+        depths: list[int] = []
+
+        def visit(node_id: Optional[int], depth: int) -> None:
+            if node_id is None or node_id not in nodes:
+                return
+            depths.append(depth)
+            node = nodes[node_id]
+            visit(node.get("left"), depth + 1)
+            visit(node.get("right"), depth + 1)
+
+        roots = {nid for nid in nodes if nid is not None}
+        for node in nodes.values():
+            for child_key in ("left", "right"):
+                child = node.get(child_key)
+                if child is not None:
+                    roots.discard(int(child))
+        for root in list(roots) or list(nodes):
+            visit(root, 0)
+
+        max_depth = max(depths, default=0)
+        width = max(600.0, len(nodes) * 80.0)
+        height = max(400.0, 120.0 + max_depth * 65.0 + 70.0)
+        return width, height

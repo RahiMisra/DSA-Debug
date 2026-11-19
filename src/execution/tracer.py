@@ -798,11 +798,11 @@ class ExecutionTracer:
         self.last_return: Optional[dict[str, Any]] = None
         self.return_structure: Any = None
 
-    def bind_array(self, target_array: list[int]) -> None:
+    def bind_array(self, target_array: list[Any]) -> None:
         """Bind the active mutable array passed into the user function."""
         self.tracked_array = target_array
 
-    def get_array_snapshot(self) -> list[int]:
+    def get_array_snapshot(self) -> list[Any]:
         """Return a copy of the current array state."""
         return list(self.tracked_array)
 

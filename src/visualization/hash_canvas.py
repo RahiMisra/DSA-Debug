@@ -6,6 +6,9 @@ import tkinter as tk
 from typing import Any, Optional
 
 from src.execution.events import ExecutionEvent
+from src.visualization.text_detail import TextDetailController, truncate_text
+from src.visualization.theme import PALETTE
+from src.visualization.viewport import ScrollableCanvas
 
 
 _MISSING = object()
@@ -14,32 +17,37 @@ _MISSING = object()
 class AuxiliaryHashCanvas(tk.Frame):
     """Renders auxiliary maps as key/value tables and sets as badge clouds."""
 
-    BG_COLOR = "#181825"
-    PANEL_BG = "#1E1E2E"
-    ITEM_BG = "#313244"
-    ACTIVE_BG = "#45475A"
-    TEXT_COLOR = "#CDD6F4"
-    MUTED_COLOR = "#6C7086"
-    MAP_COLOR = "#CBA6F7"
-    SET_COLOR = "#F5C2E7"
-    OP_COLOR = "#F9E2AF"
-    EMPTY_COLOR = "#6C7086"
+    BG_COLOR = PALETTE.canvas_bg
+    PANEL_BG = PALETTE.canvas_surface
+    ITEM_BG = PALETTE.node_bg
+    ACTIVE_BG = PALETTE.canvas_active
+    TEXT_COLOR = PALETTE.canvas_text
+    MUTED_COLOR = PALETTE.canvas_muted
+    MAP_COLOR = PALETTE.hash_map
+    SET_COLOR = PALETTE.hash_set
+    OP_COLOR = PALETTE.operation
+    EMPTY_COLOR = PALETTE.canvas_empty
+    INSET_COLOR = PALETTE.inset_highlight
 
     ROW_HEIGHT = 20
     ROW_GAP = 2
     BADGE_HEIGHT = 20
     BADGE_GAP = 4
-    CANVAS_HEIGHT = 170
+    MIN_SECTION_WIDTH = 240.0
+    MIN_CONTENT_HEIGHT = 200.0
 
     def __init__(self, master: Optional[tk.Widget] = None, **kwargs) -> None:
         super().__init__(master, bg=self.BG_COLOR, **kwargs)
-        self.canvas = tk.Canvas(
+        self.viewport = ScrollableCanvas(self, bg=self.BG_COLOR)
+        self.viewport.pack(fill=tk.BOTH, expand=True)
+        self.canvas = self.viewport.canvas
+
+        self.details = TextDetailController(
             self,
-            bg=self.BG_COLOR,
-            height=self.CANVAS_HEIGHT,
-            highlightthickness=0,
+            title="Hash Entry",
+            on_activate=self.viewport.suppress_pan_for_next_press,
         )
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.details.attach_canvas(self.canvas)
 
         self._current_state: Optional[dict[str, Any]] = None
         self._current_operation: Optional[dict[str, Any]] = None
@@ -67,6 +75,7 @@ class AuxiliaryHashCanvas(tk.Frame):
         self._current_operation = operation
 
         if not state:
+            self.viewport.update_scrollregion()
             return
 
         maps = state.get("maps", [])
@@ -77,22 +86,56 @@ class AuxiliaryHashCanvas(tk.Frame):
 
         if not sections:
             self._draw_empty()
+            self.viewport.update_scrollregion()
             return
 
-        width = float(self.canvas.winfo_width())
-        height = float(self.canvas.winfo_height())
-        if width < 200:
-            width = 640.0
-        if height < 100:
-            height = float(self.CANVAS_HEIGHT)
-
-        section_width = width / len(sections)
-        for index, (kind, container) in enumerate(sections):
-            x0 = index * section_width
+        viewport_width, viewport_height = self.viewport.viewport_size()
+        section_widths: list[float] = []
+        content_height = float(self.MIN_CONTENT_HEIGHT)
+        for kind, container in sections:
             if kind == "map":
-                self._draw_map(container, x0, section_width, height, operation)
+                entries = list(container.get("entries", []))
+                section_widths.append(max(self.MIN_SECTION_WIDTH, 260.0))
+                content_height = max(
+                    content_height,
+                    40.0 + 22.0 + len(entries) * (self.ROW_HEIGHT + self.ROW_GAP) + 30.0,
+                )
             else:
-                self._draw_set(container, x0, section_width, height, operation)
+                items = list(container.get("items", []))
+                badge_widths = [max(30.0, len(str(item)) * 7.5 + 16.0) for item in items]
+                required_width = max(
+                    self.MIN_SECTION_WIDTH,
+                    sum(badge_widths) + len(items) * self.BADGE_GAP + 30.0,
+                )
+                section_widths.append(required_width)
+
+        total_width = sum(section_widths)
+        if total_width < viewport_width:
+            extra = (viewport_width - total_width) / len(sections)
+            section_widths = [width + extra for width in section_widths]
+        content_height = max(content_height, float(viewport_height))
+
+        x0 = 0.0
+        for (kind, container), section_width in zip(sections, section_widths):
+            if kind == "map":
+                self._draw_map(
+                    container,
+                    x0,
+                    section_width,
+                    content_height,
+                    operation,
+                )
+            else:
+                self._draw_set(
+                    container,
+                    x0,
+                    section_width,
+                    content_height,
+                    operation,
+                )
+            x0 += section_width
+
+        self.viewport.update_scrollregion()
 
     # ------------------------------------------------------------------
     # Hash map rendering
@@ -138,6 +181,15 @@ class AuxiliaryHashCanvas(tk.Frame):
             outline=outline,
             width=2 if active else 1,
             tags=("hash_map", f"hash_map_{name}"),
+        )
+        self.canvas.create_line(
+            left + 2,
+            top + 2,
+            right - 2,
+            top + 2,
+            fill=self.INSET_COLOR,
+            width=1,
+            tags=("hash_map_inset",),
         )
 
         if not entries:
@@ -204,24 +256,32 @@ class AuxiliaryHashCanvas(tk.Frame):
                 width=2 if is_active else 1,
                 tags=tuple(tags),
             )
-            self.canvas.create_text(
+            key_text = str(key)
+            value_text = str(value)
+            display_key, key_truncated = truncate_text(key_text, 14)
+            display_value, value_truncated = truncate_text(value_text, 20)
+            key_item = self.canvas.create_text(
                 left + 14,
                 (row_top + row_bottom) / 2.0,
-                text=str(key),
+                text=display_key,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 9, "bold"),
                 anchor="w",
                 tags=("hash_map_key", f"hash_map_key_{name}"),
             )
-            self.canvas.create_text(
+            value_item = self.canvas.create_text(
                 right - 14,
                 (row_top + row_bottom) / 2.0,
-                text=str(value),
+                text=display_value,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 9),
                 anchor="e",
                 tags=("hash_map_value", f"hash_map_value_{name}"),
             )
+            if key_truncated:
+                self.details.register_item(key_item, key_text)
+            if value_truncated:
+                self.details.register_item(value_item, value_text)
 
         if truncated > 0:
             self.canvas.create_text(
@@ -279,6 +339,15 @@ class AuxiliaryHashCanvas(tk.Frame):
             width=2 if active else 1,
             tags=("hash_set", f"hash_set_{name}"),
         )
+        self.canvas.create_line(
+            left + 2,
+            top + 2,
+            right - 2,
+            top + 2,
+            fill=self.INSET_COLOR,
+            width=1,
+            tags=("hash_set_inset",),
+        )
 
         if not items:
             self.canvas.create_text(
@@ -323,14 +392,17 @@ class AuxiliaryHashCanvas(tk.Frame):
                 width=2 if is_active else 1,
                 tags=tuple(tags),
             )
-            self.canvas.create_text(
+            display_text, text_truncated = truncate_text(text, 12)
+            badge_label = self.canvas.create_text(
                 x_cursor + badge_width / 2.0,
                 badge_top + self.BADGE_HEIGHT / 2.0,
-                text=text,
+                text=display_text,
                 fill=self.TEXT_COLOR,
                 font=("Consolas", 9, "bold"),
                 tags=("hash_set_badge_label", f"hash_set_badge_label_{name}"),
             )
+            if text_truncated:
+                self.details.register_item(badge_label, text)
             x_cursor += badge_width + self.BADGE_GAP
 
         if hidden > 0:

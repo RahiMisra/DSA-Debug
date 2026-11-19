@@ -2,25 +2,28 @@
 
 from __future__ import annotations
 
-import random
 import tkinter as tk
 from typing import Any, Callable, Optional
 
 from src.execution.parsers import parse_leetcode_inputs
+from src.ui.presets import ARRAY_PRESET, PRESETS, Preset
+from src.visualization.theme import PALETTE, style_button, surface_kwargs
 
 
 class InputPanel(tk.Frame):
     """Panel allowing users to enter custom inputs in LeetCode format, pick presets, and configure execution."""
 
-    BG_COLOR = "#181825"
-    TEXT_COLOR = "#CDD6F4"
-    ENTRY_BG = "#313244"
-    ENTRY_FG = "#FFFFFF"
-    BTN_BG = "#45475A"
-    BTN_PRIMARY = "#89B4FA"
-    BTN_PRIMARY_FG = "#11111B"
+    BG_COLOR = PALETTE.bg_base
+    TEXT_COLOR = PALETTE.text
+    MUTED_COLOR = PALETTE.text_muted
+    ENTRY_BG = PALETTE.entry_bg
+    ENTRY_FG = PALETTE.entry_text
+    ENTRY_BORDER = PALETTE.entry_border
+    BTN_BG = PALETTE.button_bg
+    BTN_PRIMARY = PALETTE.accent
+    BTN_PRIMARY_FG = PALETTE.text_inverse
 
-    DEFAULT_INPUT = "nums = [64, 34, 25, 12, 22, 11, 90]"
+    DEFAULT_INPUT = ARRAY_PRESET.input_text
 
     def __init__(
         self,
@@ -29,9 +32,16 @@ class InputPanel(tk.Frame):
         on_preset_selected: Optional[Callable[[str], None]] = None,
         **kwargs,
     ) -> None:
-        super().__init__(master, bg=self.BG_COLOR, padx=10, pady=8, **kwargs)
+        super().__init__(
+            master,
+            padx=12,
+            pady=9,
+            **surface_kwargs(self.BG_COLOR),
+            **kwargs,
+        )
         self.on_run = on_run
         self.on_preset_selected = on_preset_selected
+        self.preset_buttons: dict[str, tk.Button] = {}
 
         self._create_widgets()
 
@@ -53,9 +63,13 @@ class InputPanel(tk.Frame):
             top_frame,
             bg=self.ENTRY_BG,
             fg=self.ENTRY_FG,
-            insertbackground="#FFFFFF",
+            insertbackground=PALETTE.entry_text,
             font=("Consolas", 11),
             relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=self.ENTRY_BORDER,
+            highlightcolor=PALETTE.focus_ring,
         )
         self.array_entry.insert(0, self.DEFAULT_INPUT)
         self.array_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10), ipady=3)
@@ -63,15 +77,12 @@ class InputPanel(tk.Frame):
         self.run_btn = tk.Button(
             top_frame,
             text="▶ Run Algorithm",
-            bg=self.BTN_PRIMARY,
-            fg=self.BTN_PRIMARY_FG,
             font=("Segoe UI", 10, "bold"),
-            relief="flat",
-            cursor="hand2",
             padx=12,
             pady=3,
             command=self._on_run_click,
         )
+        style_button(self.run_btn, "primary")
         self.run_btn.pack(side=tk.RIGHT)
 
         # Row 2: Function Name & Presets
@@ -82,7 +93,7 @@ class InputPanel(tk.Frame):
             bot_frame,
             text="Function Name (optional):",
             bg=self.BG_COLOR,
-            fg="#A6ADC8",
+            fg=self.MUTED_COLOR,
             font=("Segoe UI", 9),
         )
         lbl_func.pack(side=tk.LEFT, padx=(0, 4))
@@ -92,9 +103,13 @@ class InputPanel(tk.Frame):
             width=16,
             bg=self.ENTRY_BG,
             fg=self.ENTRY_FG,
-            insertbackground="#FFFFFF",
+            insertbackground=PALETTE.entry_text,
             font=("Consolas", 10),
             relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=self.ENTRY_BORDER,
+            highlightcolor=PALETTE.focus_ring,
         )
         self.func_entry.pack(side=tk.LEFT, padx=(0, 15), ipady=2)
 
@@ -102,62 +117,29 @@ class InputPanel(tk.Frame):
             bot_frame,
             text="LeetCode Presets:",
             bg=self.BG_COLOR,
-            fg="#A6ADC8",
+            fg=self.MUTED_COLOR,
             font=("Segoe UI", 9),
         )
         lbl_presets.pack(side=tk.LEFT, padx=(0, 6))
 
-        presets = [
-            ("Array", "nums = [2, 7, 11, 15], target = 9"),
-            ("String", 's = "anagram", t = "nagaram"'),
-            ("Linked List", "head = [1, 2, 3, 4, 5]"),
-            ("Binary Tree", "root = [10, 5, 20, null, null, 15, 30], target = 15"),
-            ("Graph", "isConnected = [[1, 1, 0], [1, 1, 0], [0, 0, 1]]"),
-            ("Stack / Queue", "nums = [3, 1, 4, 1, 5]"),
-            ("Hash Map / Set", "nums = [2, 7, 2, 7, 3]"),
-        ]
-
-        for label, default_txt in presets:
+        for preset in PRESETS:
             btn = tk.Button(
                 bot_frame,
-                text=label,
-                bg=self.BTN_BG,
-                fg=self.TEXT_COLOR,
+                text=preset.label,
                 font=("Segoe UI", 8),
-                relief="flat",
                 padx=6,
                 pady=1,
-                cursor="hand2",
-                command=lambda lbl=label, txt=default_txt: self._handle_preset(lbl, txt),
+                command=lambda p=preset: self._handle_preset(p),
             )
+            style_button(btn, "chip")
             btn.pack(side=tk.LEFT, padx=2)
+            self.preset_buttons[preset.label] = btn
 
-        btn_rand = tk.Button(
-            bot_frame,
-            text="Random Array",
-            bg=self.BTN_BG,
-            fg=self.TEXT_COLOR,
-            font=("Segoe UI", 8),
-            relief="flat",
-            padx=6,
-            pady=1,
-            cursor="hand2",
-            command=self._preset_random,
-        )
-        btn_rand.pack(side=tk.LEFT, padx=2)
-
-    def _handle_preset(self, label: str, text: str) -> None:
-        """Apply preset text and invoke optional preset callback."""
-        self.set_array_text(text)
+    def _handle_preset(self, preset: Preset) -> None:
+        """Apply a preset's generated input and notify the preset callback."""
+        self.set_array_text(preset.build_input())
         if self.on_preset_selected:
-            self.on_preset_selected(label)
-
-    def _preset_random(self) -> None:
-        """Generate a random 8-element integer list."""
-        vals = [random.randint(5, 99) for _ in range(8)]
-        self.set_array_text(f"nums = {vals}")
-        if self.on_preset_selected:
-            self.on_preset_selected("Random Array")
+            self.on_preset_selected(preset.label)
 
     def _on_run_click(self) -> None:
         if self.on_run:
@@ -190,4 +172,9 @@ class InputPanel(tk.Frame):
                 return list(v)
             elif hasattr(v, "to_list") and callable(v.to_list):
                 return v.to_list()
+
+        # Fall back to string characters for String-preset visualizations.
+        for v in parsed.values():
+            if isinstance(v, str):
+                return list(v)
         return []

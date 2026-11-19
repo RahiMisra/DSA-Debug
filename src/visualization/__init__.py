@@ -14,8 +14,16 @@ from src.visualization.event_processor import EventProcessor
 from src.visualization.graph_canvas import GraphCanvas, compute_graph_layout
 from src.visualization.hash_canvas import AuxiliaryHashCanvas
 from src.visualization.linked_list_canvas import LinkedListCanvas
+from src.visualization.panel import CollapsiblePanel
 from src.visualization.recursion_canvas import RecursionCanvas
+from src.visualization.text_detail import (
+    DetailPopup,
+    TextDetailController,
+    format_value,
+    truncate_text,
+)
 from src.visualization.tree_canvas import BinaryTreeCanvas
+from src.visualization.viewport import ScrollableCanvas
 
 __all__ = [
     "ElementHighlight",
@@ -33,4 +41,10 @@ __all__ = [
     "GraphCanvas",
     "compute_graph_layout",
     "RecursionCanvas",
+    "CollapsiblePanel",
+    "ScrollableCanvas",
+    "DetailPopup",
+    "TextDetailController",
+    "format_value",
+    "truncate_text",
 ]

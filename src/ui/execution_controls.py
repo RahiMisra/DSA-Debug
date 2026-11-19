@@ -5,17 +5,21 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Callable, Optional
 
+from src.visualization.theme import PALETTE, restore_button, style_button, surface_kwargs
+
 
 class ExecutionControls(tk.Frame):
     """Controls for stepping forward, backward, playing, and resetting execution history."""
 
-    BG_COLOR = "#181825"
-    TEXT_COLOR = "#CDD6F4"
-    BTN_BG = "#313244"
-    BTN_FG = "#FFFFFF"
-    BTN_DISABLED_BG = "#232433"
-    BTN_DISABLED_FG = "#585B70"
-    ACCENT_COLOR = "#A6E3A1"
+    BG_COLOR = PALETTE.bg_base
+    TEXT_COLOR = PALETTE.text
+    MUTED_COLOR = PALETTE.text_muted
+    BTN_BG = PALETTE.button_bg
+    BTN_FG = PALETTE.button_text
+    BTN_DISABLED_BG = PALETTE.button_disabled_bg
+    BTN_DISABLED_FG = PALETTE.button_disabled_text
+    ACCENT_COLOR = PALETTE.success
+    DANGER_COLOR = PALETTE.danger
 
     def __init__(
         self,
@@ -26,7 +30,13 @@ class ExecutionControls(tk.Frame):
         on_play_toggle: Optional[Callable[[bool], None]] = None,
         **kwargs,
     ) -> None:
-        super().__init__(master, bg=self.BG_COLOR, padx=10, pady=8, **kwargs)
+        super().__init__(
+            master,
+            padx=12,
+            pady=9,
+            **surface_kwargs(self.BG_COLOR),
+            **kwargs,
+        )
 
         self.on_step_forward = on_step_forward
         self.on_step_backward = on_step_backward
@@ -47,53 +57,47 @@ class ExecutionControls(tk.Frame):
         self.btn_reset = tk.Button(
             btn_frame,
             text="⏮ Reset",
-            bg=self.BTN_BG,
-            fg=self.BTN_FG,
             font=("Segoe UI", 9, "bold"),
-            relief="flat",
             padx=8,
             pady=4,
             command=self._on_reset_click,
         )
+        style_button(self.btn_reset)
         self.btn_reset.pack(side=tk.LEFT, padx=3)
 
         self.btn_backward = tk.Button(
             btn_frame,
             text="◀ Step Back",
-            bg=self.BTN_BG,
-            fg=self.BTN_FG,
             font=("Segoe UI", 9, "bold"),
-            relief="flat",
             padx=8,
             pady=4,
             command=self._on_backward_click,
         )
+        style_button(self.btn_backward)
         self.btn_backward.pack(side=tk.LEFT, padx=3)
 
         self.btn_play = tk.Button(
             btn_frame,
             text="▶ Play",
-            bg=self.BTN_BG,
-            fg=self.ACCENT_COLOR,
             font=("Segoe UI", 9, "bold"),
-            relief="flat",
             padx=10,
             pady=4,
             command=self._on_play_click,
         )
+        style_button(self.btn_play)
+        self.btn_play._trace_normal_fg = self.ACCENT_COLOR
+        self.btn_play.config(fg=self.ACCENT_COLOR)
         self.btn_play.pack(side=tk.LEFT, padx=3)
 
         self.btn_forward = tk.Button(
             btn_frame,
             text="Step Forward ▶",
-            bg=self.BTN_BG,
-            fg=self.BTN_FG,
             font=("Segoe UI", 9, "bold"),
-            relief="flat",
             padx=8,
             pady=4,
             command=self._on_forward_click,
         )
+        style_button(self.btn_forward)
         self.btn_forward.pack(side=tk.LEFT, padx=3)
 
         # Center: Step counter & Status details
@@ -113,7 +117,7 @@ class ExecutionControls(tk.Frame):
             center_frame,
             text="Ready to run.",
             bg=self.BG_COLOR,
-            fg="#BAC2DE",
+            fg=self.MUTED_COLOR,
             font=("Consolas", 9),
             anchor="w",
         )
@@ -140,8 +144,12 @@ class ExecutionControls(tk.Frame):
             showvalue=0,
             bg=self.BG_COLOR,
             fg=self.TEXT_COLOR,
-            troughcolor="#313244",
+            troughcolor=PALETTE.bg_item,
+            activebackground=PALETTE.accent,
             highlightthickness=0,
+            bd=0,
+            relief=tk.FLAT,
+            sliderrelief=tk.FLAT,
             length=100,
             command=self._on_speed_change,
         )
@@ -179,7 +187,9 @@ class ExecutionControls(tk.Frame):
     def play(self) -> None:
         """Start auto-stepping playback."""
         self.is_playing = True
-        self.btn_play.config(text="⏸ Pause", fg="#F38BA8")
+        self.btn_play.config(text="⏸ Pause")
+        if str(self.btn_play.cget("state")) != "disabled":
+            self.btn_play.config(fg=self.DANGER_COLOR)
         if self.on_play_toggle:
             self.on_play_toggle(True)
 
@@ -187,7 +197,9 @@ class ExecutionControls(tk.Frame):
         """Pause auto-stepping playback."""
         if self.is_playing:
             self.is_playing = False
-            self.btn_play.config(text="▶ Play", fg=self.ACCENT_COLOR)
+            self.btn_play.config(text="▶ Play")
+            if str(self.btn_play.cget("state")) != "disabled":
+                self.btn_play.config(fg=self.ACCENT_COLOR)
             if self.on_play_toggle:
                 self.on_play_toggle(False)
 
@@ -224,5 +236,19 @@ class ExecutionControls(tk.Frame):
     def _set_btn_enabled(self, btn: tk.Button, enabled: bool) -> None:
         if enabled:
             btn.config(state="normal", cursor="hand2")
+            btn.config(
+                bg=getattr(btn, "_trace_normal_bg", self.BTN_BG),
+            )
+            if btn is self.btn_play:
+                btn.config(
+                    fg=self.DANGER_COLOR if self.is_playing else self.ACCENT_COLOR
+                )
+            else:
+                restore_button(btn)
         else:
-            btn.config(state="disabled", cursor="arrow")
+            btn.config(
+                state="disabled",
+                cursor="arrow",
+                bg=self.BTN_DISABLED_BG,
+                fg=self.BTN_DISABLED_FG,
+            )

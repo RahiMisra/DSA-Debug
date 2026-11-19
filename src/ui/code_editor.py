@@ -4,26 +4,24 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import font as tkfont
+from tkinter import ttk
 from typing import Optional
+
+from src.ui.presets import ARRAY_PRESET
+from src.visualization.theme import PALETTE, VERTICAL_SCROLLBAR_STYLE
 
 
 class CodeEditor(tk.Frame):
     """Text editor with line numbering and current execution line highlighting."""
 
-    BG_COLOR = "#1E1E2E"        # Editor dark background
-    FG_COLOR = "#CDD6F4"        # Main text color
-    GUTTER_BG = "#181825"       # Line numbers gutter background
-    GUTTER_FG = "#6C7086"       # Line numbers text color
-    HIGHLIGHT_BG = "#45475A"    # Line highlight background
-    HIGHLIGHT_FG = "#F5E0DC"    # Line highlight text color
+    BG_COLOR = PALETTE.editor_bg
+    FG_COLOR = PALETTE.text
+    GUTTER_BG = PALETTE.editor_gutter_bg
+    GUTTER_FG = PALETTE.text_faint
+    HIGHLIGHT_BG = PALETTE.editor_highlight_bg
+    HIGHLIGHT_FG = PALETTE.editor_highlight_text
 
-    DEFAULT_CODE = """def bubble_sort(arr):
-    n = len(arr)
-    for i in range(n):
-        for j in range(0, n - i - 1):
-            if arr[j] > arr[j + 1]:
-                arr[j], arr[j + 1] = arr[j + 1], arr[j]
-"""
+    DEFAULT_CODE = ARRAY_PRESET.code
 
     def __init__(self, master: Optional[tk.Widget] = None, **kwargs) -> None:
         super().__init__(master, bg=self.BG_COLOR, **kwargs)
@@ -52,7 +50,11 @@ class CodeEditor(tk.Frame):
         )
         self.gutter.pack(side=tk.LEFT, fill=tk.Y)
 
-        self.scrollbar = tk.Scrollbar(self)
+        self.scrollbar = ttk.Scrollbar(
+            self,
+            orient=tk.VERTICAL,
+            style=VERTICAL_SCROLLBAR_STYLE,
+        )
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.text = tk.Text(
@@ -62,7 +64,9 @@ class CodeEditor(tk.Frame):
             bd=0,
             bg=self.BG_COLOR,
             fg=self.FG_COLOR,
-            insertbackground="#F5E0DC",
+            insertbackground=PALETTE.editor_highlight_text,
+            selectbackground=PALETTE.bg_active,
+            selectforeground=PALETTE.text,
             font=self._font,
             wrap="none",
             undo=True,

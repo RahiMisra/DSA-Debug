@@ -6,6 +6,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, Sequence
 
+from src.visualization.theme import (
+    ARRAY_BOX_BORDER_COLORS,
+    ARRAY_BOX_FILL_COLORS,
+    ARRAY_HIGHLIGHT_COLORS,
+)
+
 
 class ElementHighlight(str, Enum):
     """Highlight categories for array elements."""
@@ -20,31 +26,31 @@ class ElementHighlight(str, Enum):
 
 # Color mapping for UI bar rendering
 HIGHLIGHT_COLORS: dict[ElementHighlight, str] = {
-    ElementHighlight.DEFAULT: "#3B82F6",    # Blue
-    ElementHighlight.COMPARING: "#F59E0B",  # Amber / Yellow
-    ElementHighlight.SWAPPING: "#EF4444",   # Red
-    ElementHighlight.WRITING: "#8B5CF6",    # Purple
-    ElementHighlight.READING: "#10B981",    # Emerald Green
-    ElementHighlight.SORTED: "#059669",     # Dark Green
+    ElementHighlight.DEFAULT: ARRAY_HIGHLIGHT_COLORS["default"],
+    ElementHighlight.COMPARING: ARRAY_HIGHLIGHT_COLORS["comparing"],
+    ElementHighlight.SWAPPING: ARRAY_HIGHLIGHT_COLORS["swapping"],
+    ElementHighlight.WRITING: ARRAY_HIGHLIGHT_COLORS["writing"],
+    ElementHighlight.READING: ARRAY_HIGHLIGHT_COLORS["reading"],
+    ElementHighlight.SORTED: ARRAY_HIGHLIGHT_COLORS["sorted"],
 }
 
 # Color mappings for UI box/cell rendering
 BOX_FILL_COLORS: dict[ElementHighlight, str] = {
-    ElementHighlight.DEFAULT: "#1E293B",    # Dark Slate 800
-    ElementHighlight.COMPARING: "#78350F",  # Amber 900
-    ElementHighlight.SWAPPING: "#7F1D1D",   # Red 900
-    ElementHighlight.WRITING: "#581C87",    # Purple 900
-    ElementHighlight.READING: "#064E3B",    # Emerald 900
-    ElementHighlight.SORTED: "#065F46",     # Green 800
+    ElementHighlight.DEFAULT: ARRAY_BOX_FILL_COLORS["default"],
+    ElementHighlight.COMPARING: ARRAY_BOX_FILL_COLORS["comparing"],
+    ElementHighlight.SWAPPING: ARRAY_BOX_FILL_COLORS["swapping"],
+    ElementHighlight.WRITING: ARRAY_BOX_FILL_COLORS["writing"],
+    ElementHighlight.READING: ARRAY_BOX_FILL_COLORS["reading"],
+    ElementHighlight.SORTED: ARRAY_BOX_FILL_COLORS["sorted"],
 }
 
 BOX_BORDER_COLORS: dict[ElementHighlight, str] = {
-    ElementHighlight.DEFAULT: "#475569",    # Slate 600
-    ElementHighlight.COMPARING: "#F59E0B",  # Amber 500
-    ElementHighlight.SWAPPING: "#EF4444",   # Red 500
-    ElementHighlight.WRITING: "#A855F7",    # Purple 500
-    ElementHighlight.READING: "#10B981",    # Emerald 500
-    ElementHighlight.SORTED: "#34D399",     # Green 400
+    ElementHighlight.DEFAULT: ARRAY_BOX_BORDER_COLORS["default"],
+    ElementHighlight.COMPARING: ARRAY_BOX_BORDER_COLORS["comparing"],
+    ElementHighlight.SWAPPING: ARRAY_BOX_BORDER_COLORS["swapping"],
+    ElementHighlight.WRITING: ARRAY_BOX_BORDER_COLORS["writing"],
+    ElementHighlight.READING: ARRAY_BOX_BORDER_COLORS["reading"],
+    ElementHighlight.SORTED: ARRAY_BOX_BORDER_COLORS["sorted"],
 }
 
 

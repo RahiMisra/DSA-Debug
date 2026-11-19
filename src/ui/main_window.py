@@ -12,6 +12,7 @@ from src.ui.array_view import ArrayView
 from src.ui.code_editor import CodeEditor
 from src.ui.execution_controls import ExecutionControls
 from src.ui.input_panel import InputPanel
+from src.ui.presets import get_preset
 from src.visualization.auxiliary_canvas import AuxiliaryLinearCanvas
 from src.visualization.dashboard import MultiViewDashboard
 from src.visualization.event_processor import EventProcessor
@@ -19,6 +20,7 @@ from src.visualization.graph_canvas import GraphCanvas
 from src.visualization.hash_canvas import AuxiliaryHashCanvas
 from src.visualization.linked_list_canvas import LinkedListCanvas
 from src.visualization.recursion_canvas import RecursionCanvas
+from src.visualization.theme import PALETTE, apply_theme, surface_kwargs
 from src.visualization.tree_canvas import BinaryTreeCanvas
 
 
@@ -48,12 +50,13 @@ class MainWindow:
         self._create_layout()
 
     def _configure_window(self) -> None:
+        apply_theme(self.root)
         self.root.title(self.DEFAULT_TITLE)
         self.root.geometry(f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
         self.root.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
         self.root.resizable(True, True)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
-        self.root.configure(bg="#11111B")
+        self.root.configure(bg=PALETTE.bg_root)
 
     def _create_layout(self) -> None:
         # 1. Top Panel: Array Input & Run
@@ -68,8 +71,8 @@ class MainWindow:
         self.error_banner = tk.Label(
             self.root,
             text="",
-            bg="#F38BA8",
-            fg="#11111B",
+            bg=PALETTE.danger,
+            fg=PALETTE.text_inverse,
             font=("Segoe UI", 10, "bold"),
             padx=10,
             pady=6,
@@ -90,19 +93,23 @@ class MainWindow:
         center_frame = tk.PanedWindow(
             self.root,
             orient=tk.HORIZONTAL,
-            bg="#181825",
+            bg=PALETTE.divider,
             sashwidth=6,
             bd=0,
+            sashrelief=tk.FLAT,
         )
         center_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         # Left: Code Editor
-        editor_container = tk.Frame(center_frame, bg="#1E1E2E")
+        editor_container = tk.Frame(
+            center_frame,
+            **surface_kwargs(PALETTE.bg_base),
+        )
         lbl_editor = tk.Label(
             editor_container,
             text="Algorithm Source Code (Python)",
-            bg="#181825",
-            fg="#CDD6F4",
+            bg=PALETTE.bg_surface,
+            fg=PALETTE.text,
             font=("Segoe UI", 9, "bold"),
             padx=8,
             pady=4,
@@ -114,20 +121,10 @@ class MainWindow:
         center_frame.add(editor_container, minsize=380, width=480)
 
         # Right: Visualization View
-        viz_container = tk.Frame(center_frame, bg="#0F172A")
-        self.lbl_viz = tk.Label(
-            viz_container,
-            text="Execution Visualization",
-            bg="#181825",
-            fg="#CDD6F4",
-            font=("Segoe UI", 9, "bold"),
-            padx=8,
-            pady=4,
-            anchor="w",
-        )
-        self.lbl_viz.pack(fill=tk.X)
+        viz_container = tk.Frame(center_frame, bg=PALETTE.bg_base)
         self.dashboard = MultiViewDashboard(viz_container)
         self.dashboard.pack(fill=tk.BOTH, expand=True)
+        self.lbl_viz = self.dashboard.primary_panel.title_label
 
         self.array_view = ArrayView(self.dashboard.primary)
         self.array_view.pack(fill=tk.BOTH, expand=True)
@@ -136,7 +133,7 @@ class MainWindow:
         self.tree_view = BinaryTreeCanvas(self.dashboard.primary)
         self.graph_view = GraphCanvas(self.dashboard.primary)
         self.auxiliary_view = AuxiliaryLinearCanvas(self.dashboard.auxiliary)
-        self.hash_view = AuxiliaryHashCanvas(self.dashboard.auxiliary)
+        self.hash_view = AuxiliaryHashCanvas(self.dashboard.hash)
         self.recursion_view = RecursionCanvas(self.dashboard.subwork)
 
         center_frame.add(viz_container, minsize=400)
@@ -149,83 +146,10 @@ class MainWindow:
             pass
 
     def handle_preset_selected(self, preset_name: str) -> None:
-        """Populate appropriate algorithm template code when a preset is selected."""
-        if preset_name == "Linked List":
-            code = """def traverse_linked_list(head):
-    curr = head
-    while curr is not None:
-        curr = curr.next
-    return head
-"""
-            self.editor.set_code(code)
-        elif preset_name == "Binary Tree":
-            code = """def search_bst(root, target=15):
-    curr = root
-    while curr is not None:
-        if curr.val == target:
-            return curr
-        elif target < curr.val:
-            curr = curr.left
-        else:
-            curr = curr.right
-    return None
-"""
-            self.editor.set_code(code)
-        elif preset_name == "Graph":
-            code = """def count_provinces(isConnected):
-    n = len(isConnected)
-    visited = [False] * n
-    provinces = 0
-    for start in range(n):
-        if not visited[start]:
-            provinces += 1
-            stack = [start]
-            while stack:
-                node = stack.pop()
-                visited[node] = True
-                for neighbor in range(n):
-                    if isConnected[node][neighbor] == 1 and not visited[neighbor]:
-                        stack.append(neighbor)
-    return provinces
-"""
-            self.editor.set_code(code)
-        elif preset_name == "Stack / Queue":
-            code = """from collections import deque
-
-def stack_and_queue(nums):
-    stack = []
-    queue = deque()
-    for n in nums:
-        stack.append(n)
-        queue.append(n)
-    result = []
-    while stack:
-        result.append(stack.pop())
-    while queue:
-        result.append(queue.popleft())
-    return result
-"""
-            self.editor.set_code(code)
-        elif preset_name == "Hash Map / Set":
-            code = """def hash_demo(nums):
-    counts = {}
-    seen = set()
-    for n in nums:
-        counts[n] = counts.get(n, 0) + 1
-        if n not in seen:
-            seen.add(n)
-    return len(counts)
-"""
-            self.editor.set_code(code)
-        elif preset_name in ("Array", "Random Array"):
-            code = """def bubble_sort(arr):
-    n = len(arr)
-    for i in range(n):
-        for j in range(0, n - i - 1):
-            if arr[j] > arr[j + 1]:
-                arr[j], arr[j + 1] = arr[j + 1], arr[j]
-"""
-            self.editor.set_code(code)
+        """Load the selected preset's default algorithm code."""
+        preset = get_preset(preset_name)
+        if preset is not None:
+            self.editor.set_code(preset.code)
 
     def handle_run(self) -> None:
         """Execute user code and initialize execution history for playback."""
@@ -414,6 +338,7 @@ def stack_and_queue(nums):
             self.recursion_view.render_event(event)
             self.recursion_view.pack(fill=tk.BOTH, expand=True)
 
+        self.dashboard.set_auxiliary_panels(show_linear, show_hash)
         self.dashboard.set_workspace_visible(
             auxiliary=show_linear or show_hash,
             subwork=show_subwork,
